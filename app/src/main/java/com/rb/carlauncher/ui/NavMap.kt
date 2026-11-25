@@ -22,7 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rb.carlauncher.CarViewModel
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -30,15 +30,6 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import java.io.File
 
-private val DARK_TILES = XYTileSource(
-    "CartoDark", 0, 19, 256, ".png",
-    arrayOf(
-        "https://a.basemaps.cartocdn.com/dark_all/",
-        "https://b.basemaps.cartocdn.com/dark_all/",
-        "https://c.basemaps.cartocdn.com/dark_all/"
-    ),
-    "© OpenStreetMap contributors © CARTO"
-)
 
 /**
  * Dark, blue-tinted OpenStreetMap that follows the GPS position (heading-up),
@@ -71,18 +62,18 @@ fun NavMap(
             osmdroidTileCache = File(ctx.cacheDir, "osmdroid/tiles")
         }
         MapView(ctx).apply {
-            setTileSource(DARK_TILES)
+            setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
             controller.setZoom(zoom)
             controller.setCenter(GeoPoint(14.5995, 120.9842))
-            // blue "night" tint over the dark tiles
+            // "night mode": invert the standard OSM tiles and tint them navy-blue
             val cm = ColorMatrix(
                 floatArrayOf(
-                    0.7f, 0f, 0f, 0f, 6f,
-                    0f, 1.0f, 0f, 0f, 12f,
-                    0f, 0f, 2.0f, 0f, 30f,
+                    -0.55f, 0f, 0f, 0f, 150f,
+                    0f, -0.85f, 0f, 0f, 225f,
+                    0f, 0f, -1.15f, 0f, 300f,
                     0f, 0f, 0f, 1f, 0f
                 )
             )

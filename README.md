@@ -37,5 +37,5 @@ Local build (needs the Android SDK): `gradle assembleDebug`
 ## Notes / limits
 
 * Speed comes from GPS, so the gauge works with any device. Real **fuel level, gear and outside temperature need the car's OBD-II data**, which a normal phone cannot read; the fuel bar shows the device battery, the temperature is the ambient sensor if present (else battery temperature), and the gear is P when stopped / D when moving.
-* Maps use OpenStreetMap data with CARTO dark tiles, Nominatim search and the public OSRM demo router. These are free and need no API key, but are intended for light use; swap in your own tile/routing server for heavy use.
+* Maps use OpenStreetMap data with OpenStreetMap tiles (darkened in-app), Nominatim search and the public OSRM demo router. These are free and need no API key, but are intended for light use; swap in your own tile/routing server for heavy use.
 * Internet is required for map tiles and routing.

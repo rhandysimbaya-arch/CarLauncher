@@ -531,7 +531,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
             .apply()
     }
 
-    fun setFxEnabled(on: Boolean) {
+    fun switchFx(on: Boolean) {
         fxEnabled = on
         pushFx()
     }
@@ -565,7 +565,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
     }
 
-    fun setVolume(v: Int) {
+    fun changeVolume(v: Int) {
         val x = v.coerceIn(0, volumeMax)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, x, 0)
         volume = x

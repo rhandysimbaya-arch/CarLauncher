@@ -113,7 +113,7 @@ fun SoundScreen(vm: CarViewModel) {
                 }
                 Switch(
                     checked = vm.fxEnabled,
-                    onCheckedChange = { vm.setFxEnabled(it) },
+                    onCheckedChange = { vm.switchFx(it) },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White, checkedTrackColor = C.Cyan,
                         uncheckedThumbColor = C.Dim, uncheckedTrackColor = Color(0xFF14224F)
@@ -160,7 +160,7 @@ fun SoundScreen(vm: CarViewModel) {
                 LabeledSlider(
                     "Volume", "${vm.volume * 100 / vm.volumeMax}%",
                     vm.volume.toFloat() / vm.volumeMax, Modifier.weight(1f)
-                ) { vm.setVolume((it * vm.volumeMax).roundToInt()) }
+                ) { vm.changeVolume((it * vm.volumeMax).roundToInt()) }
             }
             if (vm.boostDb > 6f) {
                 Text(

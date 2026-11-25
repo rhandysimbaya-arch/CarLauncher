@@ -65,6 +65,8 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     // ---- UI state -------------------------------------------------------------------------
     var tab by mutableStateOf(Tab.Home)
 
+    var mapMode by mutableStateOf(MapMode.Heading)
+
     var theme by mutableStateOf(if (prefs.getString("theme", "neon") == "classic") ThemeMode.Classic else ThemeMode.Neon)
         private set
 

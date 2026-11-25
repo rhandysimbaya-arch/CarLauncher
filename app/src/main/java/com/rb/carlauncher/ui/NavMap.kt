@@ -4,12 +4,21 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.view.MotionEvent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import com.rb.carlauncher.MapMode
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -41,6 +50,7 @@ fun NavMap(
     modifier: Modifier = Modifier,
     follow: Boolean = true,
     zoom: Double = 17.0,
+    mode: MapMode = vm.mapMode,
     onUserTouch: () -> Unit = {}
 ) {
     val ctx = LocalContext.current
@@ -102,10 +112,23 @@ fun NavMap(
         }
     }
 
+    val tilt by animateFloatAsState(if (mode == MapMode.Drive3D) 58f else 0f, label = "tilt")
+    LaunchedEffect(mode) {
+        mapView.controller.setZoom(if (mode == MapMode.Drive3D) 18.0 else zoom)
+    }
+
     Box(modifier) {
         AndroidView(
             factory = { mapView },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    rotationX = tilt
+                    val sc = 1f + tilt / 58f * 0.9f
+                    scaleX = sc
+                    scaleY = sc
+                    cameraDistance = 14f * density
+                },
             update = { mv ->
                 val nav = vm.nav
                 if (nav != null) {
@@ -121,29 +144,54 @@ fun NavMap(
                 val loc = vm.location
                 if (follow && loc != null) {
                     mv.controller.setCenter(loc)
-                    mv.mapOrientation = -vm.bearing
+                    mv.mapOrientation = if (mode == MapMode.Top) 0f else -vm.bearing
                 }
                 mv.invalidate()
             }
         )
 
-        // Car chevron
+        // Blue car marker (you)
         Canvas(
             Modifier
                 .align(Alignment.Center)
-                .size(du(8f))
-        ) {
-            val w = size.width
-            val h = size.height
-            val path = Path().apply {
-                moveTo(w / 2f, 0f)
-                lineTo(w, h)
-                lineTo(w / 2f, h * 0.72f)
-                lineTo(0f, h)
-                close()
-            }
-            drawPath(path, Color(0xFF0C3D8F).copy(alpha = 0.85f))
-            drawPath(path, C.Cyan, style = Stroke(width = w * 0.07f))
-        }
+                .size(du(5.6f), du(10.2f))
+        ) { drawCar() }
     }
+}
+
+private fun DrawScope.drawCar() {
+    val w = size.width
+    val h = size.height
+    val bx = w * 0.12f
+    val bw = w * 0.76f
+    // glow + shadow
+    drawCircle(C.Cyan.copy(alpha = 0.14f), w * 1.0f, Offset(w / 2f, h / 2f))
+    drawRoundRect(Color.Black.copy(alpha = 0.35f), Offset(bx + w * 0.05f, h * 0.05f), Size(bw, h * 0.92f), CornerRadius(bw * 0.4f))
+    // wheels
+    val wheel = Color(0xFF071230)
+    for (y in listOf(0.16f, 0.66f)) {
+        drawRoundRect(wheel, Offset(bx - w * 0.07f, h * y), Size(w * 0.12f, h * 0.15f), CornerRadius(w * 0.04f))
+        drawRoundRect(wheel, Offset(bx + bw - w * 0.05f, h * y), Size(w * 0.12f, h * 0.15f), CornerRadius(w * 0.04f))
+    }
+    // mirrors
+    drawRoundRect(Color(0xFF2F7BFF), Offset(bx - w * 0.07f, h * 0.30f), Size(w * 0.1f, h * 0.05f), CornerRadius(w * 0.03f))
+    drawRoundRect(Color(0xFF2F7BFF), Offset(bx + bw - w * 0.03f, h * 0.30f), Size(w * 0.1f, h * 0.05f), CornerRadius(w * 0.03f))
+    // body
+    drawRoundRect(
+        Brush.verticalGradient(listOf(Color(0xFF5BB0FF), Color(0xFF1E6BFF), Color(0xFF0B3FB0)), startY = 0f, endY = h),
+        Offset(bx, 0f), Size(bw, h), CornerRadius(bw * 0.36f)
+    )
+    drawRoundRect(Color(0xFFBFE3FF), Offset(bx, 0f), Size(bw, h), CornerRadius(bw * 0.36f), style = androidx.compose.ui.graphics.drawscope.Stroke(w * 0.035f))
+    // glass
+    val glass = Color(0xFF0A1F4D)
+    drawRoundRect(glass, Offset(bx + bw * 0.1f, h * 0.24f), Size(bw * 0.8f, h * 0.15f), CornerRadius(bw * 0.2f))
+    drawRoundRect(Color(0xFF3C8BFF), Offset(bx + bw * 0.12f, h * 0.41f), Size(bw * 0.76f, h * 0.21f), CornerRadius(bw * 0.12f))
+    drawRoundRect(glass, Offset(bx + bw * 0.14f, h * 0.64f), Size(bw * 0.72f, h * 0.1f), CornerRadius(bw * 0.18f))
+    // lights
+    drawCircle(C.Cyan.copy(alpha = 0.35f), w * 0.2f, Offset(bx + bw * 0.22f, h * 0.05f))
+    drawCircle(C.Cyan.copy(alpha = 0.35f), w * 0.2f, Offset(bx + bw * 0.78f, h * 0.05f))
+    drawRoundRect(Color(0xFFE8FBFF), Offset(bx + bw * 0.1f, h * 0.025f), Size(bw * 0.24f, h * 0.035f), CornerRadius(w * 0.03f))
+    drawRoundRect(Color(0xFFE8FBFF), Offset(bx + bw * 0.66f, h * 0.025f), Size(bw * 0.24f, h * 0.035f), CornerRadius(w * 0.03f))
+    drawRoundRect(Color(0xFFFF2D4D), Offset(bx + bw * 0.1f, h * 0.935f), Size(bw * 0.24f, h * 0.03f), CornerRadius(w * 0.03f))
+    drawRoundRect(Color(0xFFFF2D4D), Offset(bx + bw * 0.66f, h * 0.935f), Size(bw * 0.24f, h * 0.03f), CornerRadius(w * 0.03f))
 }

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Streetview
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
@@ -62,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rb.carlauncher.BuildConfig
 import com.rb.carlauncher.CarViewModel
+import com.rb.carlauncher.MapMode
 import com.rb.carlauncher.ThemeMode
 import com.rb.carlauncher.safeStart
 
@@ -72,6 +74,7 @@ private fun Modifier.card(): Modifier = this.panel(RoundedCornerShape(24.dp))
 // ---------------------------------------------------------------------------------------------
 @Composable
 fun MapsScreen(vm: CarViewModel) {
+    val ctx = LocalContext.current
     var follow by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -188,6 +191,60 @@ fun MapsScreen(vm: CarViewModel) {
                 .padding(du(1.6f))
                 .fillMaxWidth(0.4f)
         )
+
+        // view angle: Top / Heading / 3D + Street View
+        Column(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = du(1.6f)),
+            verticalArrangement = Arrangement.spacedBy(du(0.8f))
+        ) {
+            MapMode.values().forEach { m ->
+                val sel = vm.mapMode == m
+                Box(
+                    Modifier
+                        .width(du(13f))
+                        .clip(RoundedCornerShape(du(1.6f)))
+                        .background(if (sel) C.Cyan else Color(0xEE050A1C))
+                        .border(1.dp, C.Blue, RoundedCornerShape(du(1.6f)))
+                        .clickable { vm.mapMode = m; follow = true }
+                        .padding(vertical = du(1.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        m.label,
+                        color = if (sel) Color(0xFF02060F) else Color.White,
+                        fontSize = su(3.2f), fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Row(
+                Modifier
+                    .width(du(13f))
+                    .clip(RoundedCornerShape(du(1.6f)))
+                    .background(Color(0xEE050A1C))
+                    .border(1.dp, C.Blue, RoundedCornerShape(du(1.6f)))
+                    .clickable {
+                        val loc = vm.location
+                        if (loc != null) {
+                            val app = Intent(Intent.ACTION_VIEW, Uri.parse("google.streetview:cbll=${loc.latitude},${loc.longitude}"))
+                                .setPackage("com.google.android.apps.maps")
+                            val web = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${loc.latitude},${loc.longitude}")
+                            )
+                            ctx.safeStart(if (app.resolveActivity(ctx.packageManager) != null) app else web)
+                        }
+                    }
+                    .padding(vertical = du(1.2f)),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Streetview, null, tint = C.Cyan, modifier = Modifier.size(du(3.8f)))
+                Spacer(Modifier.width(du(0.6f)))
+                Text("Street", color = Color.White, fontSize = su(3.0f), fontWeight = FontWeight.Bold)
+            }
+        }
 
         // recenter
         Box(

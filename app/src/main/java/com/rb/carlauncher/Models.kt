@@ -55,3 +55,6 @@ data class PlaceResult(val name: String, val lat: Double, val lon: Double) {
 data class AppEntry(val label: String, val pkg: String, val icon: ImageBitmap)
 
 enum class ThemeMode { Neon, Classic }
+
+/** Top = north-up 2D, Heading = rotates with travel direction, Drive3D = tilted perspective view. */
+enum class MapMode(val label: String) { Top("Top"), Heading("Heading"), Drive3D("3D") }

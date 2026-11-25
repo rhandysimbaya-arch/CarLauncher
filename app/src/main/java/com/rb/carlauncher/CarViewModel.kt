@@ -61,11 +61,20 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     private val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val fx = AudioFx()
     private var tap: SpectrumTap? = null
+    private val welcome = WelcomeAudio(ctx)
 
     // ---- UI state -------------------------------------------------------------------------
     var tab by mutableStateOf(Tab.Home)
 
     var mapMode by mutableStateOf(MapMode.Heading)
+
+    // boot intro
+    var bootAnim by mutableStateOf(prefs.getBoolean("bootAnim", true))
+        private set
+    var bootSound by mutableStateOf(prefs.getBoolean("bootSound", true))
+        private set
+    var bootActive by mutableStateOf(prefs.getBoolean("bootAnim", true))
+        private set
 
     var theme by mutableStateOf(if (prefs.getString("theme", "neon") == "classic") ThemeMode.Classic else ThemeMode.Neon)
         private set
@@ -251,6 +260,9 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: Throwable) {
         }
 
+        // no animation -> still greet by voice at start-up
+        if (!bootActive && bootSound) welcome.play()
+
         initFx()
         refreshVolume()
         loadApps()
@@ -293,6 +305,28 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
 
     fun has(permission: String) =
         ContextCompat.checkSelfPermission(ctx, permission) == PackageManager.PERMISSION_GRANTED
+
+    fun onBootStart() {
+        if (bootSound) welcome.play()
+    }
+
+    fun finishBoot() {
+        bootActive = false
+    }
+
+    fun replayBoot() {
+        bootActive = true
+    }
+
+    fun toggleBootAnim() {
+        bootAnim = !bootAnim
+        prefs.edit().putBoolean("bootAnim", bootAnim).apply()
+    }
+
+    fun toggleBootSound() {
+        bootSound = !bootSound
+        prefs.edit().putBoolean("bootSound", bootSound).apply()
+    }
 
     fun toggleTheme() {
         theme = if (theme == ThemeMode.Neon) ThemeMode.Classic else ThemeMode.Neon
@@ -708,6 +742,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: Exception) {
         }
         tap?.stop()
+        welcome.release()
         fx.closeAll()
         monitor?.stop()
     }

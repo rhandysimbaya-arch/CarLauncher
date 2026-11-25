@@ -481,6 +481,9 @@ fun SettingsScreen(vm: CarViewModel, onRequestPermissions: () -> Unit) {
                     vm.toggleTheme()
                 }
             }
+            item { SettingRow("Boot animation", if (vm.bootAnim) "On (tap to turn off)" else "Off (tap to turn on)") { vm.toggleBootAnim() } }
+            item { SettingRow("Boot sound & welcome voice", if (vm.bootSound) "On (tap to turn off)" else "Off (tap to turn on)") { vm.toggleBootSound() } }
+            item { SettingRow("Play welcome intro", "Preview the animation and sound") { vm.tab = com.rb.carlauncher.Tab.Home; vm.replayBoot() } }
             item { SettingRow("Bluetooth", "Pair and connect devices") { ctx.safeStart(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }
             item { SettingRow("Wi-Fi", "Networks") { ctx.safeStart(Intent(Settings.ACTION_WIFI_SETTINGS)) } }
             item { SettingRow("Display", "Brightness and more") { ctx.safeStart(Intent(Settings.ACTION_DISPLAY_SETTINGS)) } }

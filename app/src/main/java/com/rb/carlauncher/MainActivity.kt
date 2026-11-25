@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.rb.carlauncher.ui.BootScreen
 import com.rb.carlauncher.ui.BottomNav
 import com.rb.carlauncher.ui.HomeScreen
 import com.rb.carlauncher.ui.C
@@ -146,6 +147,7 @@ fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit) {
                     }
                     BottomNav(vm, Modifier.weight(0.14f))
                 }
+                if (vm.bootActive) BootScreen(vm)
             }
         }
     }

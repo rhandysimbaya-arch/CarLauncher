@@ -23,6 +23,11 @@ GitHub Actions builds the APK on every push to `main`:
 
 Local build (needs the Android SDK): `gradle assembleDebug`
 
+## Which APK?
+
+* **app-lite-debug.apk** (install this one): no notification-listener service, so Google Play Protect allows sideloading. Music buttons (previous / play-pause / next) work with any player, but title/art/progress are not shown.
+* **app-full-debug.apk**: adds now-playing title, art and progress, but Play Protect may block installing it.
+
 ## First run
 
 1. Install the APK and open it. Allow **Location**, **Bluetooth** and **Phone** permissions.

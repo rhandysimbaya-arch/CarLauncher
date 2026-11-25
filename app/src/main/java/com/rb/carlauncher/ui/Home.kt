@@ -73,6 +73,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
+import com.rb.carlauncher.BuildConfig
 import com.rb.carlauncher.CarViewModel
 import com.rb.carlauncher.Tab
 import com.rb.carlauncher.arrowAngle
@@ -470,13 +471,15 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
                         text = { Text("Choose music app") },
                         onClick = { menu = false; vm.tab = Tab.Music }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Media access settings") },
-                        onClick = {
-                            menu = false
-                            ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                        }
-                    )
+                    if (BuildConfig.MEDIA_ACCESS) {
+                        DropdownMenuItem(
+                            text = { Text("Media access settings") },
+                            onClick = {
+                                menu = false
+                                ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -509,11 +512,18 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 } else {
-                    Text("Nothing playing", color = Color.White, fontSize = su(4.4f), fontWeight = FontWeight.Bold)
                     Text(
-                        if (vm.mediaAccess) "Start music on your phone" else "Tap to allow media access",
+                        if (BuildConfig.MEDIA_ACCESS) "Nothing playing" else "Media controls",
+                        color = Color.White, fontSize = su(4.4f), fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        when {
+                            !BuildConfig.MEDIA_ACCESS -> "Controls any music player"
+                            vm.mediaAccess -> "Start music on your phone"
+                            else -> "Tap to allow media access"
+                        },
                         color = C.Dim, fontSize = su(3.2f),
-                        modifier = Modifier.clickable(enabled = !vm.mediaAccess) {
+                        modifier = Modifier.clickable(enabled = BuildConfig.MEDIA_ACCESS && !vm.mediaAccess) {
                             ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                         }
                     )

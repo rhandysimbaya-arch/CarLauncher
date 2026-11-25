@@ -29,6 +29,20 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+    flavorDimensions += "media"
+    productFlavors {
+        // "lite": no notification-listener service, so Google Play Protect lets it be sideloaded.
+        create("lite") {
+            dimension = "media"
+            buildConfigField("boolean", "MEDIA_ACCESS", "false")
+        }
+        // "full": adds now-playing title/art/progress via a notification listener (may be blocked by Play Protect).
+        create("full") {
+            dimension = "media"
+            buildConfigField("boolean", "MEDIA_ACCESS", "true")
+        }
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"

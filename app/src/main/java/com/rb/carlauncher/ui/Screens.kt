@@ -60,6 +60,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.rb.carlauncher.BuildConfig
 import com.rb.carlauncher.CarViewModel
 import com.rb.carlauncher.safeStart
 
@@ -225,7 +226,7 @@ fun MusicScreen(vm: CarViewModel) {
         ) {
             Text("Music apps", color = Color.White, fontSize = su(4.6f), fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(du(1.5f)))
-            if (!vm.mediaAccess) {
+            if (BuildConfig.MEDIA_ACCESS && !vm.mediaAccess) {
                 Text(
                     "Allow media access so the launcher can show and control what's playing.",
                     color = C.Dim, fontSize = su(3.2f)
@@ -405,9 +406,11 @@ fun SettingsScreen(vm: CarViewModel, onRequestPermissions: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(du(1f))
         ) {
             item { SettingRow("Permissions", if (locOk) "Location granted" else "Grant location, Bluetooth, phone") { onRequestPermissions() } }
-            item {
-                SettingRow("Media access", if (vm.mediaAccess) "Enabled" else "Needed for music controls") {
-                    ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            if (BuildConfig.MEDIA_ACCESS) {
+                item {
+                    SettingRow("Media access", if (vm.mediaAccess) "Enabled" else "Needed for music info") {
+                        ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    }
                 }
             }
             item {

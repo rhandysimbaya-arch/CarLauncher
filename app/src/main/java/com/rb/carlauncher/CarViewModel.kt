@@ -17,6 +17,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
+import android.media.AudioManager
+import android.view.KeyEvent
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.BatteryManager
@@ -296,6 +298,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- media -----------------------------------------------------------------------------
     private fun checkMedia() {
+        if (!BuildConfig.MEDIA_ACCESS) return
         val enabled = NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
         mediaAccess = enabled
         if (enabled && monitor == null) {
@@ -309,16 +312,29 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Without the listener (lite build) fall back to system media keys: works with any player.
+    private fun sendKey(code: Int) {
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+        } catch (_: Exception) {
+        }
+    }
+
     fun playPause() {
-        monitor?.playPause()
+        val m = monitor
+        if (m != null) m.playPause() else sendKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
     }
 
     fun next() {
-        monitor?.next()
+        val m = monitor
+        if (m != null) m.next() else sendKey(KeyEvent.KEYCODE_MEDIA_NEXT)
     }
 
     fun previous() {
-        monitor?.previous()
+        val m = monitor
+        if (m != null) m.previous() else sendKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
     }
 
     fun seekFraction(f: Float) {

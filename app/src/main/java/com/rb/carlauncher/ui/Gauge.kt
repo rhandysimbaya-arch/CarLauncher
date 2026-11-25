@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
-fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier) {
+fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier, neon: Boolean = false) {
     val shown by animateFloatAsState(
         targetValue = speed.coerceIn(0f, 200f),
         animationSpec = tween(450),
@@ -58,15 +58,38 @@ fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier) {
             val start = 135f
             val sweep = 270f
 
-            val brush = Brush.sweepGradient(
-                0.0f to C.Red,
-                0.12f to C.Red,
-                0.375f to C.Cyan,
-                0.62f to C.Blue,
-                0.86f to C.Purple,
-                1.0f to C.Red,
-                center = c
-            )
+            val brush = if (neon) {
+                Brush.sweepGradient(
+                    0.0f to Color(0xFFFF2D2D),
+                    0.12f to Color(0xFFFF2D2D),
+                    0.375f to Color(0xFF0A84FF),
+                    0.55f to Color(0xFF2EA8FF),
+                    0.72f to Color(0xFFCFE6FF),
+                    0.90f to Color(0xFF6C8CFF),
+                    0.95f to Color(0xFFFF3B3B),
+                    1.0f to Color(0xFFFF2D2D),
+                    center = c
+                )
+            } else {
+                Brush.sweepGradient(
+                    0.0f to C.Red,
+                    0.12f to C.Red,
+                    0.375f to C.Cyan,
+                    0.62f to C.Blue,
+                    0.86f to C.Purple,
+                    1.0f to C.Red,
+                    center = c
+                )
+            }
+
+            if (neon) {
+                drawCircle(C.Cyan.copy(alpha = 0.10f), radius * 0.995f, c, style = Stroke(stroke * 0.18f))
+                drawCircle(
+                    Brush.radialGradient(listOf(Color(0xFF06102C), Color(0xFF01030A)), center = c, radius = radius * 0.62f),
+                    radius * 0.62f, c
+                )
+                drawCircle(C.Blue.copy(alpha = 0.45f), radius * 0.62f, c, style = Stroke(stroke * 0.12f))
+            }
 
             // track
             drawArc(
@@ -144,7 +167,7 @@ fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier) {
             val na = Math.toRadians((start + sweep * shown / 200f).toDouble())
             val n1 = Offset((c.x + radius * 0.50f * cos(na)).toFloat(), (c.y + radius * 0.50f * sin(na)).toFloat())
             val n2 = Offset((c.x + radius * 0.64f * cos(na)).toFloat(), (c.y + radius * 0.64f * sin(na)).toFloat())
-            drawLine(Color(0xFF6FB6FF).copy(alpha = 0.35f), n1, n2, strokeWidth = stroke * 0.6f, cap = StrokeCap.Round)
+            drawLine((if (neon) C.Cyan else Color(0xFF6FB6FF)).copy(alpha = 0.4f), n1, n2, strokeWidth = stroke * 0.7f, cap = StrokeCap.Round)
             drawLine(Color.White, n1, n2, strokeWidth = stroke * 0.24f, cap = StrokeCap.Round)
         }
 

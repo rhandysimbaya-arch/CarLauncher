@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -29,7 +31,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.rb.carlauncher.ui.BottomNav
 import com.rb.carlauncher.ui.HomeScreen
+import com.rb.carlauncher.ui.C
+import com.rb.carlauncher.ui.LocalNeon
 import com.rb.carlauncher.ui.LocalU
+import com.rb.carlauncher.ui.SoundScreen
 import com.rb.carlauncher.ui.MapsScreen
 import com.rb.carlauncher.ui.MusicScreen
 import com.rb.carlauncher.ui.PhoneScreen
@@ -91,7 +96,8 @@ class MainActivity : ComponentActivity() {
         val wanted = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.READ_PHONE_STATE
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.RECORD_AUDIO
         )
         if (Build.VERSION.SDK_INT >= 31) wanted.add(Manifest.permission.BLUETOOTH_CONNECT)
         val missing = wanted.filter { !vm.has(it) }
@@ -105,16 +111,24 @@ fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF040A1E), Color(0xFF010208))))
+                .background(Brush.verticalGradient(listOf(Color(0xFF030818), Color(0xFF010208))))
         ) {
             val u = maxHeight.value / 100f
-            CompositionLocalProvider(LocalU provides u) {
+            CompositionLocalProvider(LocalU provides u, LocalNeon provides (vm.theme == ThemeMode.Neon)) {
                 Column(
                     Modifier
                         .fillMaxSize()
                         .padding(horizontal = du(1.5f), vertical = du(1.2f))
                 ) {
                     TopStatusBar(vm, Modifier.weight(0.12f))
+                    if (vm.theme == ThemeMode.Neon) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(Brush.horizontalGradient(listOf(Color.Transparent, C.Cyan, Color(0xFF1E6BFF), C.Cyan, Color.Transparent)))
+                        )
+                    }
                     Box(
                         Modifier
                             .weight(0.72f)
@@ -125,6 +139,7 @@ fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit) {
                             Tab.Home -> HomeScreen(vm)
                             Tab.Maps -> MapsScreen(vm)
                             Tab.Music -> MusicScreen(vm)
+                            Tab.Sound -> SoundScreen(vm)
                             Tab.Phone -> PhoneScreen(vm)
                             Tab.Settings -> SettingsScreen(vm, onRequestPermissions)
                         }

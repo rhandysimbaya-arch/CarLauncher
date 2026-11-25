@@ -6,6 +6,7 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.SystemClock
 
 /** Follows whichever app is currently playing and exposes its metadata + transport controls. */
@@ -119,6 +120,14 @@ class MediaMonitor(
 
     fun previous() {
         controller?.transportControls?.skipToPrevious()
+    }
+
+    fun setShuffle(on: Boolean) {
+        if (Build.VERSION.SDK_INT >= 29) controller?.transportControls?.setShuffleMode(if (on) 1 else 0)
+    }
+
+    fun setRepeat(on: Boolean) {
+        if (Build.VERSION.SDK_INT >= 29) controller?.transportControls?.setRepeatMode(if (on) 2 else 0)
     }
 
     fun seekTo(ms: Long) {

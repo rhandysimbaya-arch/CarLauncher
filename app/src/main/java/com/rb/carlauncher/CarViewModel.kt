@@ -17,20 +17,26 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
-import android.media.AudioManager
-import android.view.KeyEvent
 import android.location.LocationListener
 import android.location.LocationManager
+import android.media.AudioManager
+import android.media.audiofx.AudioEffect
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.telephony.PhoneStateListener
+import android.telephony.SignalStrength
 import android.telephony.TelephonyManager
+import android.view.KeyEvent
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asImageBitmap
@@ -45,14 +51,22 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.osmdroid.util.GeoPoint
+import kotlin.math.roundToInt
 
 class CarViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx: Context = app.applicationContext
     private val main = Handler(Looper.getMainLooper())
+    private val prefs = ctx.getSharedPreferences("carlauncher", Context.MODE_PRIVATE)
+    private val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val fx = AudioFx()
+    private var tap: SpectrumTap? = null
 
     // ---- UI state -------------------------------------------------------------------------
     var tab by mutableStateOf(Tab.Home)
+
+    var theme by mutableStateOf(if (prefs.getString("theme", "neon") == "classic") ThemeMode.Classic else ThemeMode.Neon)
+        private set
 
     var speedKmh by mutableFloatStateOf(0f)
         private set
@@ -62,6 +76,15 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var gpsFix by mutableStateOf(false)
         private set
+
+    // trip computer
+    var tripKm by mutableDoubleStateOf(prefs.getFloat("tripKm", 0f).toDouble())
+        private set
+    var tripMs by mutableLongStateOf(prefs.getLong("tripMs", 0L))
+        private set
+    var maxKmh by mutableFloatStateOf(prefs.getFloat("maxKmh", 0f))
+        private set
+    val avgKmh: Float get() = if (tripMs > 0) (tripKm / (tripMs / 3_600_000.0)).toFloat() else 0f
 
     var batteryPct by mutableIntStateOf(0)
         private set
@@ -96,13 +119,48 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     var permTick by mutableIntStateOf(0)
         private set
 
+    // ---- sound -----------------------------------------------------------------------------
+    var fxEnabled by mutableStateOf(prefs.getBoolean("fxOn", true))
+        private set
+    var presetName by mutableStateOf(prefs.getString("preset", "Flat") ?: "Flat")
+        private set
+    var bandFreqs by mutableStateOf<List<Float>>(emptyList())
+        private set
+    var bandDb by mutableStateOf<List<Float>>(emptyList())
+        private set
+    var eqMinDb by mutableFloatStateOf(-15f)
+        private set
+    var eqMaxDb by mutableFloatStateOf(15f)
+        private set
+    var bassStrength by mutableIntStateOf(prefs.getInt("bass", 0))
+        private set
+    var boostDb by mutableFloatStateOf(prefs.getFloat("boost", 0f))
+        private set
+    var fxGlobal by mutableStateOf(false)
+        private set
+    var fxSessions by mutableIntStateOf(0)
+        private set
+    var volume by mutableIntStateOf(0)
+        private set
+    val volumeMax: Int = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+
+    var spectrum by mutableStateOf(FloatArray(32))
+        private set
+    var levelDb by mutableFloatStateOf(-60f)
+        private set
+    var specLive by mutableStateOf(false)
+        private set
+
     // ---- internals ------------------------------------------------------------------------
     private var monitor: MediaMonitor? = null
     private var gpsRegistered = false
     private var netRegistered = false
     private var lastGpsTime = 0L
+    private var lastGpsLoc: Location? = null
+    private var lastTripSave = 0L
     private var lastOffRouteCheck = 0L
     private var lastReroute = 0L
+    private var cellLevel = 0
 
     private val locationManager get() = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
@@ -131,12 +189,30 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val fxReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val id = i.getIntExtra(AudioEffect.EXTRA_AUDIO_SESSION, -1)
+            if (id <= 0) return
+            if (i.action == AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION) fx.open(id) else fx.close(id)
+            pushFx()
+        }
+    }
+
     private val sensorListener = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) {
             if (e.values.isNotEmpty()) ambientTemp = e.values[0]
         }
 
         override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
+    }
+
+    @Suppress("DEPRECATION")
+    private val phoneListener = object : PhoneStateListener() {
+        override fun onSignalStrengthsChanged(s: SignalStrength?) {
+            if (s == null) return
+            cellLevel = if (Build.VERSION.SDK_INT >= 23) s.level else gsmToLevel(s.gsmSignalStrength)
+            readSignal()
+        }
     }
 
     init {
@@ -151,6 +227,13 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         }
         ContextCompat.registerReceiver(ctx, btReceiver, btFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
+        // media players announce their audio session here so effects can be attached to them
+        val fxFilter = IntentFilter().apply {
+            addAction(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
+            addAction(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
+        }
+        ContextCompat.registerReceiver(ctx, fxReceiver, fxFilter, ContextCompat.RECEIVER_EXPORTED)
+
         try {
             val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
             sm.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE)?.let {
@@ -159,18 +242,31 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: Exception) {
         }
 
+        try {
+            @Suppress("DEPRECATION")
+            (ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager)
+                .listen(phoneListener, PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
+        } catch (_: Throwable) {
+        }
+
+        initFx()
+        refreshVolume()
         loadApps()
         startLocation()
+        startSpectrum()
 
         viewModelScope.launch {
             while (isActive) {
                 startLocation()
+                startSpectrum()
                 refreshBt()
                 readSignal()
                 checkMedia()
+                refreshVolume()
                 if (gpsFix && SystemClock.elapsedRealtime() - lastGpsTime > 5000) {
                     gpsFix = false
                     speedKmh = 0f
+                    lastGpsLoc = null
                 }
                 delay(5000)
             }
@@ -179,20 +275,29 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onResume() {
         startLocation()
+        startSpectrum()
         refreshBt()
         checkMedia()
+        refreshVolume()
     }
 
     fun onPermissionsChanged() {
         permTick++
         startLocation()
+        startSpectrum()
         refreshBt()
         readSignal()
     }
 
-    fun has(permission: String) = ctx.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    fun has(permission: String) =
+        ContextCompat.checkSelfPermission(ctx, permission) == PackageManager.PERMISSION_GRANTED
 
-    // ---- location & speed ------------------------------------------------------------------
+    fun toggleTheme() {
+        theme = if (theme == ThemeMode.Neon) ThemeMode.Classic else ThemeMode.Neon
+        prefs.edit().putString("theme", if (theme == ThemeMode.Neon) "neon" else "classic").apply()
+    }
+
+    // ---- location, speed & trip --------------------------------------------------------------
     @SuppressLint("MissingPermission")
     private fun startLocation() {
         if (!has(Manifest.permission.ACCESS_FINE_LOCATION)) return
@@ -230,8 +335,39 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
             val kmh = if (l.hasSpeed()) l.speed * 3.6f else 0f
             speedKmh = if (kmh < 2f) 0f else kmh
             if (l.hasBearing() && kmh > 5f) bearing = l.bearing
+            if (speedKmh > maxKmh) maxKmh = speedKmh
+            updateTrip(l)
         }
         nav?.let { updateNav(it, p) }
+    }
+
+    private fun updateTrip(l: Location) {
+        val prev = lastGpsLoc
+        lastGpsLoc = l
+        if (prev == null || speedKmh < 3f) return
+        val dtMs = (l.elapsedRealtimeNanos - prev.elapsedRealtimeNanos) / 1_000_000L
+        val d = prev.distanceTo(l)
+        val accOk = !l.hasAccuracy() || l.accuracy < 40f
+        if (dtMs in 200L..10_000L && d < 300f && accOk) {
+            tripKm += d / 1000.0
+            tripMs += dtMs
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTripSave > 20_000) {
+            lastTripSave = now
+            saveTrip()
+        }
+    }
+
+    private fun saveTrip() {
+        prefs.edit().putFloat("tripKm", tripKm.toFloat()).putLong("tripMs", tripMs).putFloat("maxKmh", maxKmh).apply()
+    }
+
+    fun resetTrip() {
+        tripKm = 0.0
+        tripMs = 0L
+        maxKmh = 0f
+        saveTrip()
     }
 
     // ---- battery / temperature / signal / bluetooth ----------------------------------------
@@ -243,15 +379,32 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         if (t != Int.MIN_VALUE) batteryTemp = t / 10f
     }
 
+    private fun gsmToLevel(gsm: Int): Int = when {
+        gsm == 99 -> 0
+        gsm >= 18 -> 4
+        gsm >= 12 -> 3
+        gsm >= 8 -> 2
+        gsm >= 4 -> 1
+        else -> 0
+    }
+
+    @Suppress("DEPRECATION")
     private fun readSignal() {
         try {
             if (Build.VERSION.SDK_INT >= 28) {
-                val tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-                val s = tm.signalStrength
-                if (s != null) signalLevel = s.level
+                val s = (ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager).signalStrength
+                if (s != null) cellLevel = s.level
             }
         } catch (_: Throwable) {
         }
+        var wifiLevel = 0
+        try {
+            val wm = ctx.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val info = wm?.connectionInfo
+            if (info != null && info.networkId != -1) wifiLevel = WifiManager.calculateSignalLevel(info.rssi, 5)
+        } catch (_: Throwable) {
+        }
+        signalLevel = if (cellLevel > 0) cellLevel else wifiLevel
     }
 
     @SuppressLint("MissingPermission")
@@ -315,9 +468,8 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     // Without the listener (lite build) fall back to system media keys: works with any player.
     private fun sendKey(code: Int) {
         try {
-            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
-            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+            audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
         } catch (_: Exception) {
         }
     }
@@ -337,9 +489,110 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         if (m != null) m.previous() else sendKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
     }
 
+    fun setShuffle(on: Boolean) {
+        monitor?.setShuffle(on)
+    }
+
+    fun setRepeat(on: Boolean) {
+        monitor?.setRepeat(on)
+    }
+
     fun seekFraction(f: Float) {
         val d = media.durationMs
         if (d > 0) monitor?.seekTo((d * f.coerceIn(0f, 1f)).toLong())
+    }
+
+    fun musicActive(): Boolean = try {
+        audio.isMusicActive
+    } catch (_: Exception) {
+        false
+    }
+
+    // ---- sound: equalizer, bass boost, volume booster ------------------------------------------
+    private fun initFx() {
+        fx.open(0)
+        val info = fx.info()
+        bandFreqs = info.freqs
+        eqMinDb = info.minDb
+        eqMaxDb = info.maxDb
+        fxGlobal = info.globalOk
+        val saved = prefs.getString("bands", null)?.split(",")?.mapNotNull { it.toFloatOrNull() }
+        bandDb = if (saved != null && saved.size == bandFreqs.size) saved else presetBands(presetName)
+        pushFx()
+    }
+
+    private fun presetBands(name: String): List<Float> {
+        val p = EqPresets.find(name) ?: EqPresets.all[0]
+        return EqPresets.forBands(p, bandFreqs).map { it.coerceIn(eqMinDb, eqMaxDb) }
+    }
+
+    private fun pushFx() {
+        fx.update(fxEnabled, bandFreqs, bandDb, bassStrength, (boostDb * 100f).roundToInt())
+        fxSessions = fx.count()
+        fxGlobal = fx.globalActive()
+        prefs.edit()
+            .putBoolean("fxOn", fxEnabled)
+            .putString("preset", presetName)
+            .putString("bands", bandDb.joinToString(","))
+            .putInt("bass", bassStrength)
+            .putFloat("boost", boostDb)
+            .apply()
+    }
+
+    fun setFxEnabled(on: Boolean) {
+        fxEnabled = on
+        pushFx()
+    }
+
+    fun selectPreset(name: String) {
+        val p = EqPresets.find(name) ?: return
+        presetName = name
+        bandDb = presetBands(name)
+        bassStrength = p.bass
+        pushFx()
+    }
+
+    fun setBand(index: Int, db: Float) {
+        if (index !in bandDb.indices) return
+        bandDb = bandDb.toMutableList().also { it[index] = db.coerceIn(eqMinDb, eqMaxDb) }
+        presetName = "Custom"
+        pushFx()
+    }
+
+    fun setBass(strength: Int) {
+        bassStrength = strength.coerceIn(0, 1000)
+        pushFx()
+    }
+
+    fun setBoost(db: Float) {
+        boostDb = db.coerceIn(0f, 12f)
+        pushFx()
+    }
+
+    fun refreshVolume() {
+        volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+    }
+
+    fun setVolume(v: Int) {
+        val x = v.coerceIn(0, volumeMax)
+        audio.setStreamVolume(AudioManager.STREAM_MUSIC, x, 0)
+        volume = x
+    }
+
+    /** dB shown in the "Sound Level" meter: real output level if we can read it, else the volume setting. */
+    fun soundLevelDb(): Float =
+        if (specLive) levelDb else -3f - (1f - volume.toFloat() / volumeMax) * 40f
+
+    private fun startSpectrum() {
+        if (tap != null || !has(Manifest.permission.RECORD_AUDIO)) return
+        val t = SpectrumTap { bars, lvl ->
+            spectrum = bars
+            levelDb = lvl
+        }
+        if (t.start()) {
+            tap = t
+            specLive = true
+        }
     }
 
     // ---- navigation ------------------------------------------------------------------------
@@ -451,13 +704,17 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        saveTrip()
         try {
             locationManager.removeUpdates(locListener)
             ctx.unregisterReceiver(batteryReceiver)
             ctx.unregisterReceiver(btReceiver)
+            ctx.unregisterReceiver(fxReceiver)
             (ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(sensorListener)
         } catch (_: Exception) {
         }
+        tap?.stop()
+        fx.closeAll()
         monitor?.stop()
     }
 }

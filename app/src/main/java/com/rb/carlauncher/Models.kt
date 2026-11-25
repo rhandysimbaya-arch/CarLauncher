@@ -5,7 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import org.osmdroid.util.GeoPoint
 
 enum class Tab(val label: String) {
-    Home("Home"), Maps("Maps"), Music("Music"), Phone("Phone"), Settings("Settings")
+    Home("Home"), Maps("Maps"), Music("Music"), Sound("Sound"), Phone("Phone"), Settings("Settings")
 }
 
 data class MediaInfo(
@@ -53,3 +53,5 @@ data class PlaceResult(val name: String, val lat: Double, val lon: Double) {
 }
 
 data class AppEntry(val label: String, val pkg: String, val icon: ImageBitmap)
+
+enum class ThemeMode { Neon, Classic }

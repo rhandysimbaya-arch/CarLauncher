@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.MoreVert
@@ -76,6 +77,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.rb.carlauncher.BuildConfig
 import com.rb.carlauncher.CarViewModel
 import com.rb.carlauncher.Tab
+import com.rb.carlauncher.ThemeMode
 import com.rb.carlauncher.arrowAngle
 import com.rb.carlauncher.formatClock
 import com.rb.carlauncher.formatDist
@@ -163,7 +165,7 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun VDivider() {
+fun VDivider() {
     Box(
         Modifier
             .width(1.dp)
@@ -224,6 +226,10 @@ private fun BatteryIcon(pct: Int) {
 // ---------------------------------------------------------------------------------------------
 @Composable
 fun HomeScreen(vm: CarViewModel) {
+    if (vm.theme == ThemeMode.Neon) {
+        NeonHome(vm)
+        return
+    }
     Row(
         Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(du(1.8f))
@@ -244,31 +250,8 @@ private fun SpeedPanel(vm: CarViewModel, modifier: Modifier) {
                 .weight(1f)
                 .fillMaxWidth()
         )
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = du(1.5f), vertical = du(0.8f)),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.LocalGasStation, null, tint = Color.White, modifier = Modifier.size(du(5f)))
-            Spacer(Modifier.width(du(1.5f)))
-            Text("E", color = Color.White, fontSize = su(3.6f), fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(du(1f)))
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(du(0.4f))) {
-                for (i in 0 until 5) {
-                    val filled = (i + 0.5f) / 5f * 100f <= vm.batteryPct
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(du(1.9f))
-                            .clip(RoundedCornerShape(du(0.4f)))
-                            .background(if (filled) C.Cyan else Color(0xFF14224F))
-                    )
-                }
-            }
-            Spacer(Modifier.width(du(1f)))
-            Text("F", color = Color.White, fontSize = su(3.6f), fontWeight = FontWeight.Bold)
-        }
+        Spacer(Modifier.height(du(1f)))
+        SpeedBarMeter(vm.speedKmh, Modifier.fillMaxWidth().padding(horizontal = du(1f), vertical = du(0.6f)))
     }
 }
 
@@ -576,7 +559,7 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SeekBar(fraction: Float, onSeek: (Float) -> Unit, modifier: Modifier = Modifier) {
+fun SeekBar(fraction: Float, onSeek: (Float) -> Unit, modifier: Modifier = Modifier) {
     Canvas(
         modifier.pointerInput(Unit) {
             detectTapGestures { off -> onSeek(off.x / size.width) }
@@ -605,6 +588,7 @@ fun BottomNav(vm: CarViewModel, modifier: Modifier = Modifier) {
         Tab.Home to Icons.Filled.Home,
         Tab.Maps to Icons.Filled.Place,
         Tab.Music to Icons.Filled.MusicNote,
+        Tab.Sound to Icons.Filled.GraphicEq,
         Tab.Phone to Icons.Filled.Phone,
         Tab.Settings to Icons.Filled.Settings
     )
@@ -612,9 +596,7 @@ fun BottomNav(vm: CarViewModel, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth()
-            .clip(barShape)
-            .background(Brush.verticalGradient(listOf(Color(0xFF0A1544), Color(0xFF050B24))))
-            .border(1.dp, Color(0x552F6BFF), barShape),
+            .panel(barShape),
         verticalAlignment = Alignment.CenterVertically
     ) {
         items.forEach { (tab, icon) ->

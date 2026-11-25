@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -17,7 +20,7 @@ import androidx.compose.ui.unit.sp
 object C {
     val Panel1 = Color(0xFF0A1544)
     val Panel2 = Color(0xFF050B24)
-    val Cyan = Color(0xFF18D8FF)
+    val Cyan = Color(0xFF14E0FF)
     val Blue = Color(0xFF2F6BFF)
     val Purple = Color(0xFF8A3DFF)
     val Red = Color(0xFFFF2D55)
@@ -35,11 +38,32 @@ fun du(p: Float): Dp = (LocalU.current * p).dp
 @Composable
 fun su(p: Float): TextUnit = (LocalU.current * p).sp
 
-fun Modifier.panel(shape: Shape): Modifier = this
-    .clip(shape)
-    .background(Brush.verticalGradient(listOf(C.Panel1, C.Panel2)), shape)
-    .border(
-        1.5.dp,
-        Brush.linearGradient(listOf(Color(0xFF2A7BFF), Color(0xFF1A2E7A), Color(0xFF7B4DFF))),
-        shape
-    )
+val LocalNeon = compositionLocalOf { false }
+
+fun Modifier.panel(shape: Shape): Modifier = composed {
+    if (LocalNeon.current) {
+        this
+            .drawBehind {
+                val o = shape.createOutline(size, layoutDirection, this)
+                drawOutline(o, C.Cyan.copy(alpha = 0.05f), style = Stroke(30f))
+                drawOutline(o, C.Cyan.copy(alpha = 0.09f), style = Stroke(18f))
+                drawOutline(o, C.Blue.copy(alpha = 0.22f), style = Stroke(8f))
+            }
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(Color(0xFF04102E), Color(0xFF020512))), shape)
+            .border(
+                2.dp,
+                Brush.linearGradient(listOf(C.Cyan, Color(0xFF1E6BFF), C.Cyan)),
+                shape
+            )
+    } else {
+        this
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(C.Panel1, C.Panel2)), shape)
+            .border(
+                1.5.dp,
+                Brush.linearGradient(listOf(Color(0xFF2A7BFF), Color(0xFF1A2E7A), Color(0xFF7B4DFF))),
+                shape
+            )
+    }
+}

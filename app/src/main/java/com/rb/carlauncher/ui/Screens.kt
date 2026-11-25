@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rb.carlauncher.BuildConfig
 import com.rb.carlauncher.CarViewModel
+import com.rb.carlauncher.ThemeMode
 import com.rb.carlauncher.safeStart
 
 private fun Modifier.card(): Modifier = this.panel(RoundedCornerShape(24.dp))
@@ -416,6 +417,11 @@ fun SettingsScreen(vm: CarViewModel, onRequestPermissions: () -> Unit) {
             item {
                 SettingRow("Default launcher", "Set Car Launcher as home app") {
                     ctx.safeStart(Intent(Settings.ACTION_HOME_SETTINGS))
+                }
+            }
+            item {
+                SettingRow("Theme", if (vm.theme == ThemeMode.Neon) "Neon Drive (tap for Classic)" else "Classic (tap for Neon Drive)") {
+                    vm.toggleTheme()
                 }
             }
             item { SettingRow("Bluetooth", "Pair and connect devices") { ctx.safeStart(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }

@@ -122,14 +122,6 @@ class MediaMonitor(
         controller?.transportControls?.skipToPrevious()
     }
 
-    fun setShuffle(on: Boolean) {
-        if (Build.VERSION.SDK_INT >= 29) controller?.transportControls?.setShuffleMode(if (on) 1 else 0)
-    }
-
-    fun setRepeat(on: Boolean) {
-        if (Build.VERSION.SDK_INT >= 29) controller?.transportControls?.setRepeatMode(if (on) 2 else 0)
-    }
-
     fun seekTo(ms: Long) {
         controller?.transportControls?.seekTo(ms)
     }

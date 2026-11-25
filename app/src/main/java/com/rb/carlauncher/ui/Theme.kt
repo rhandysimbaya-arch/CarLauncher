@@ -5,6 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.composed
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.Modifier
@@ -45,9 +48,14 @@ fun Modifier.panel(shape: Shape): Modifier = composed {
         this
             .drawBehind {
                 val o = shape.createOutline(size, layoutDirection, this)
-                drawOutline(o, C.Cyan.copy(alpha = 0.05f), style = Stroke(30f))
-                drawOutline(o, C.Cyan.copy(alpha = 0.09f), style = Stroke(18f))
-                drawOutline(o, C.Blue.copy(alpha = 0.22f), style = Stroke(8f))
+                val rr = (o as? Outline.Rounded)?.roundRect
+                val corner = rr?.topLeftCornerRadius?.x ?: 0f
+                fun glow(color: Color, w: Float) {
+                    drawRoundRect(color, Offset.Zero, size, CornerRadius(corner), style = Stroke(w))
+                }
+                glow(C.Cyan.copy(alpha = 0.05f), 30f)
+                glow(C.Cyan.copy(alpha = 0.09f), 18f)
+                glow(C.Blue.copy(alpha = 0.22f), 8f)
             }
             .clip(shape)
             .background(Brush.verticalGradient(listOf(Color(0xFF04102E), Color(0xFF020512))), shape)

@@ -489,14 +489,6 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         if (m != null) m.previous() else sendKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
     }
 
-    fun setShuffle(on: Boolean) {
-        monitor?.setShuffle(on)
-    }
-
-    fun setRepeat(on: Boolean) {
-        monitor?.setRepeat(on)
-    }
-
     fun seekFraction(f: Float) {
         val d = media.durationMs
         if (d > 0) monitor?.seekTo((d * f.coerceIn(0f, 1f)).toLong())

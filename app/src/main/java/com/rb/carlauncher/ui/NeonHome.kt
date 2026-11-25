@@ -159,8 +159,6 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
     }
     val pos = m.livePosition(tick)
     val art = remember(m.art) { m.art?.asImageBitmap() }
-    var shuffle by remember { mutableStateOf(false) }
-    var repeat by remember { mutableStateOf(false) }
     val artShape = RoundedCornerShape(du(1.6f))
 
     Row(
@@ -236,13 +234,6 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (BuildConfig.MEDIA_ACCESS) {
-                    Icon(
-                        Icons.Filled.Shuffle, null,
-                        tint = if (shuffle) C.Cyan else Color.White,
-                        modifier = Modifier.size(du(5f)).clickable { shuffle = !shuffle; vm.setShuffle(shuffle) }
-                    )
-                }
                 Icon(
                     Icons.Filled.SkipPrevious, null, tint = Color.White,
                     modifier = Modifier.size(du(7.4f)).clickable { vm.previous() }
@@ -265,13 +256,6 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
                     Icons.Filled.SkipNext, null, tint = Color.White,
                     modifier = Modifier.size(du(7.4f)).clickable { vm.next() }
                 )
-                if (BuildConfig.MEDIA_ACCESS) {
-                    Icon(
-                        Icons.Filled.Repeat, null,
-                        tint = if (repeat) C.Cyan else Color.White,
-                        modifier = Modifier.size(du(5f)).clickable { repeat = !repeat; vm.setRepeat(repeat) }
-                    )
-                }
             }
         }
     }

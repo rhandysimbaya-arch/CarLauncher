@@ -1,0 +1,645 @@
+package com.rb.carlauncher.ui
+
+import android.content.Intent
+import android.os.SystemClock
+import android.provider.Settings
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import com.rb.carlauncher.CarViewModel
+import com.rb.carlauncher.Tab
+import com.rb.carlauncher.arrowAngle
+import com.rb.carlauncher.formatClock
+import com.rb.carlauncher.formatDist
+import com.rb.carlauncher.instruction
+import com.rb.carlauncher.safeStart
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.ceil
+import kotlin.math.roundToInt
+
+// ---------------------------------------------------------------------------------------------
+// Status bar
+// ---------------------------------------------------------------------------------------------
+@Composable
+fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val now by produceState(initialValue = Date()) {
+        while (true) {
+            value = Date()
+            delay(1000)
+        }
+    }
+    val timeFmt = remember { SimpleDateFormat("h:mm", Locale.US) }
+    val ampmFmt = remember { SimpleDateFormat("a", Locale.US) }
+    val big = su(4.8f)
+    val small = su(3.4f)
+
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = du(2.5f)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.Home, null, tint = Color.White,
+            modifier = Modifier
+                .size(du(5.6f))
+                .clickable { vm.tab = Tab.Home }
+        )
+        Spacer(Modifier.width(du(3f)))
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(fontSize = big, fontWeight = FontWeight.Medium)) { append(timeFmt.format(now)) }
+                withStyle(SpanStyle(fontSize = small)) { append(" " + ampmFmt.format(now).uppercase(Locale.US)) }
+            },
+            color = Color.White
+        )
+        Spacer(Modifier.width(du(2.5f)))
+        VDivider()
+        Spacer(Modifier.width(du(2.5f)))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable { ctx.safeStart(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+        ) {
+            Icon(Icons.Filled.Bluetooth, null, tint = C.Cyan, modifier = Modifier.size(du(5f)))
+            Spacer(Modifier.width(du(1f)))
+            Column {
+                Text(
+                    if (vm.btName != null) "Connected" else "Bluetooth",
+                    color = Color.White, fontSize = su(2.5f)
+                )
+                Text(
+                    vm.btName ?: "Not connected",
+                    color = C.Dim, fontSize = su(2.9f), maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(Modifier.weight(1f))
+
+        val t = if (!vm.ambientTemp.isNaN()) vm.ambientTemp else vm.batteryTemp
+        Icon(Icons.Filled.Thermostat, null, tint = C.Cyan, modifier = Modifier.size(du(5f)))
+        Text(
+            if (t.isNaN()) "--°C" else "${t.roundToInt()}°C",
+            color = Color.White, fontSize = su(4f)
+        )
+        Spacer(Modifier.width(du(2.5f)))
+        VDivider()
+        Spacer(Modifier.width(du(2.5f)))
+        SignalBars(vm.signalLevel)
+        Spacer(Modifier.width(du(2f)))
+        BatteryIcon(vm.batteryPct)
+    }
+}
+
+@Composable
+private fun VDivider() {
+    Box(
+        Modifier
+            .width(1.dp)
+            .height(du(4.6f))
+            .background(Color(0x663A5BFF))
+    )
+}
+
+@Composable
+private fun SignalBars(level: Int) {
+    Canvas(Modifier.size(du(4.6f), du(4.2f))) {
+        val bars = 5
+        val gap = size.width * 0.07f
+        val bw = (size.width - gap * (bars - 1)) / bars
+        for (i in 0 until bars) {
+            val bh = size.height * (0.28f + 0.72f * (i + 1) / bars)
+            val on = i <= level
+            drawRoundRect(
+                color = if (on) Color.White else Color.White.copy(alpha = 0.25f),
+                topLeft = Offset(i * (bw + gap), size.height - bh),
+                size = Size(bw, bh),
+                cornerRadius = CornerRadius(bw * 0.3f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BatteryIcon(pct: Int) {
+    Canvas(Modifier.size(du(5.6f), du(3.4f))) {
+        val nub = size.width * 0.08f
+        val bodyW = size.width - nub
+        drawRoundRect(
+            color = Color.White,
+            size = Size(bodyW, size.height),
+            cornerRadius = CornerRadius(size.height * 0.25f),
+            style = Stroke(size.height * 0.1f)
+        )
+        val pad = size.height * 0.2f
+        val fillW = (bodyW - pad * 2) * pct.coerceIn(0, 100) / 100f
+        drawRoundRect(
+            color = if (pct <= 15) C.Red else Color.White,
+            topLeft = Offset(pad, pad),
+            size = Size(fillW, size.height - pad * 2),
+            cornerRadius = CornerRadius(size.height * 0.1f)
+        )
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset(bodyW + nub * 0.2f, size.height * 0.3f),
+            size = Size(nub * 0.8f, size.height * 0.4f),
+            cornerRadius = CornerRadius(nub * 0.3f)
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Home screen
+// ---------------------------------------------------------------------------------------------
+@Composable
+fun HomeScreen(vm: CarViewModel) {
+    Row(
+        Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(du(1.8f))
+    ) {
+        SpeedPanel(vm, Modifier.weight(0.34f).fillMaxHeight())
+        NavCard(vm, Modifier.weight(0.38f).fillMaxHeight())
+        MediaCard(vm, Modifier.weight(0.28f).fillMaxHeight())
+    }
+}
+
+@Composable
+private fun SpeedPanel(vm: CarViewModel, modifier: Modifier) {
+    Column(modifier.panel(RoundedCornerShape(du(4f))).padding(du(1.5f))) {
+        Speedometer(
+            speed = vm.speedKmh,
+            gear = if (vm.speedKmh < 1f) "P" else "D",
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = du(1.5f), vertical = du(0.8f)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.LocalGasStation, null, tint = Color.White, modifier = Modifier.size(du(5f)))
+            Spacer(Modifier.width(du(1.5f)))
+            Text("E", color = Color.White, fontSize = su(3.6f), fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(du(1f)))
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(du(0.4f))) {
+                for (i in 0 until 5) {
+                    val filled = (i + 0.5f) / 5f * 100f <= vm.batteryPct
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(du(1.9f))
+                            .clip(RoundedCornerShape(du(0.4f)))
+                            .background(if (filled) C.Cyan else Color(0xFF14224F))
+                    )
+                }
+            }
+            Spacer(Modifier.width(du(1f)))
+            Text("F", color = Color.White, fontSize = su(3.6f), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Navigation card
+// ---------------------------------------------------------------------------------------------
+@Composable
+private fun NavCard(vm: CarViewModel, modifier: Modifier) {
+    Box(modifier.panel(RoundedCornerShape(du(4f)))) {
+        NavMap(vm, Modifier.fillMaxSize(), follow = true, zoom = 17.0)
+        // transparent layer: tapping the card opens the full Maps screen
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable { vm.tab = Tab.Maps }
+        )
+        NavBanner(
+            vm,
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(du(1.6f))
+                .fillMaxWidth(0.62f)
+        )
+        Compass(
+            vm.bearing,
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(du(1.6f))
+        )
+        EtaBar(
+            vm,
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(du(1.6f))
+                .fillMaxWidth(0.82f)
+        )
+    }
+}
+
+@Composable
+fun NavBanner(vm: CarViewModel, modifier: Modifier = Modifier) {
+    val nav = vm.nav
+    val shape = RoundedCornerShape(du(1.6f))
+    if (nav == null) {
+        Row(
+            modifier
+                .clip(shape)
+                .background(Color(0xE60A1544))
+                .border(1.dp, C.Blue.copy(alpha = 0.6f), shape)
+                .padding(du(1.8f)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Search, null, tint = C.Cyan, modifier = Modifier.size(du(6f)))
+            Spacer(Modifier.width(du(1.5f)))
+            Column {
+                Text("Where to?", color = Color.White, fontSize = su(4.4f), fontWeight = FontWeight.Bold)
+                Text(
+                    if (vm.gpsFix) "Tap to set a destination" else "Waiting for GPS...",
+                    color = C.Dim, fontSize = su(2.9f)
+                )
+            }
+        }
+        return
+    }
+    val step = nav.steps[nav.stepIndex]
+    Row(
+        modifier
+            .clip(shape)
+            .background(C.Green)
+            .padding(horizontal = du(1.8f), vertical = du(1.4f)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.ArrowUpward, null, tint = Color.White,
+            modifier = Modifier
+                .size(du(8f))
+                .rotate(arrowAngle(step))
+        )
+        Spacer(Modifier.width(du(1.5f)))
+        Column {
+            Text(formatDist(nav.distToNext), color = Color.White, fontSize = su(6f), fontWeight = FontWeight.Bold)
+            Text(instruction(step), color = Color.White, fontSize = su(3.4f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+fun EtaBar(vm: CarViewModel, modifier: Modifier = Modifier) {
+    val nav = vm.nav ?: return
+    val minutes = ceil(nav.remainingSeconds / 60.0).toInt().coerceAtLeast(1)
+    val duration = if (minutes >= 60) "${minutes / 60} h ${minutes % 60} min" else "$minutes min"
+    val eta = SimpleDateFormat("h:mm a", Locale.US)
+        .format(Date(System.currentTimeMillis() + (nav.remainingSeconds * 1000).toLong()))
+        .uppercase(Locale.US)
+    val shape = RoundedCornerShape(du(2f))
+    Row(
+        modifier
+            .clip(shape)
+            .background(Color(0xEE050A1C))
+            .border(1.dp, Color(0x552F6BFF), shape)
+            .padding(horizontal = du(2f), vertical = du(1.2f)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Filled.Schedule, null, tint = Color.White, modifier = Modifier.size(du(5.4f)))
+        Spacer(Modifier.width(du(1.5f)))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "$duration • ${formatDist(nav.remainingMeters)}",
+                color = Color.White, fontSize = su(3.9f), fontWeight = FontWeight.Medium
+            )
+            Text(eta, color = C.Dim, fontSize = su(3.2f))
+        }
+        Icon(
+            Icons.Filled.Close, null, tint = Color.White,
+            modifier = Modifier
+                .size(du(5.4f))
+                .clickable { vm.cancelNav() }
+        )
+    }
+}
+
+@Composable
+fun Compass(bearing: Float, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(du(7.4f))
+            .clip(CircleShape)
+            .background(Color(0xEE050A1C))
+            .border(1.dp, Color(0x772F6BFF), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize().padding(du(0.9f))) {
+            rotate(-bearing) {
+                val w = size.width
+                val h = size.height
+                val red = Path().apply {
+                    moveTo(w / 2f, 0f)
+                    lineTo(w * 0.7f, h * 0.45f)
+                    lineTo(w * 0.3f, h * 0.45f)
+                    close()
+                }
+                drawPath(red, C.Red)
+            }
+        }
+        Text(
+            "N", color = Color.White, fontSize = su(2.8f), fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = du(0.6f))
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Media card
+// ---------------------------------------------------------------------------------------------
+@Composable
+fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val m = vm.media
+    val tick by produceState(SystemClock.elapsedRealtime(), m) {
+        while (true) {
+            value = SystemClock.elapsedRealtime()
+            delay(500)
+        }
+    }
+    val pos = m.livePosition(tick)
+    var menu by remember { mutableStateOf(false) }
+    val art = remember(m.art) { m.art?.asImageBitmap() }
+    val artShape = RoundedCornerShape(du(1.6f))
+
+    Column(modifier.panel(RoundedCornerShape(du(4f))).padding(du(2f))) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(du(6.4f))
+                    .clip(RoundedCornerShape(du(1.8f)))
+                    .background(C.Blue),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Bluetooth, null, tint = Color.White, modifier = Modifier.size(du(4.2f)))
+            }
+            Spacer(Modifier.width(du(1.5f)))
+            Text(
+                when {
+                    vm.btName != null -> "Bluetooth"
+                    m.appName.isNotBlank() -> m.appName
+                    else -> "Media"
+                },
+                color = Color.White, fontSize = su(4f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Box {
+                Icon(
+                    Icons.Filled.MoreVert, null, tint = Color.White,
+                    modifier = Modifier
+                        .size(du(5.4f))
+                        .clickable { menu = true }
+                )
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Choose music app") },
+                        onClick = { menu = false; vm.tab = Tab.Music }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Media access settings") },
+                        onClick = {
+                            menu = false
+                            ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(du(2f)))
+
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(du(18f))
+                    .clip(artShape)
+                    .background(Brush.linearGradient(listOf(Color(0xFFFF7A3D), Color(0xFFB02BFF), Color(0xFF2F6BFF)))),
+                contentAlignment = Alignment.Center
+            ) {
+                if (art != null) {
+                    Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                } else {
+                    Icon(Icons.Filled.MusicNote, null, tint = Color.White, modifier = Modifier.size(du(8f)))
+                }
+            }
+            Spacer(Modifier.width(du(2f)))
+            Column(Modifier.weight(1f)) {
+                if (m.available) {
+                    Text(
+                        m.title.ifBlank { "Unknown" }, color = Color.White, fontSize = su(5f),
+                        fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        m.artist.ifBlank { m.appName }, color = C.Dim, fontSize = su(3.8f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Text("Nothing playing", color = Color.White, fontSize = su(4.4f), fontWeight = FontWeight.Bold)
+                    Text(
+                        if (vm.mediaAccess) "Start music on your phone" else "Tap to allow media access",
+                        color = C.Dim, fontSize = su(3.2f),
+                        modifier = Modifier.clickable(enabled = !vm.mediaAccess) {
+                            ctx.safeStart(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(du(1.5f)))
+        SeekBar(
+            fraction = if (m.durationMs > 0) pos.toFloat() / m.durationMs else 0f,
+            onSeek = { vm.seekFraction(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(du(3.6f))
+        )
+        Row(Modifier.fillMaxWidth()) {
+            Text(formatClock(pos), color = Color.White, fontSize = su(3.2f))
+            Spacer(Modifier.weight(1f))
+            Text(formatClock(m.durationMs), color = Color.White, fontSize = su(3.2f))
+        }
+        Spacer(Modifier.height(du(1f)))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.SkipPrevious, null, tint = Color.White,
+                modifier = Modifier.size(du(8f)).clickable { vm.previous() }
+            )
+            Box(
+                Modifier
+                    .size(du(11f))
+                    .border(2.dp, Color.White, CircleShape)
+                    .clip(CircleShape)
+                    .clickable { vm.playPause() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (m.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null,
+                    tint = Color.White, modifier = Modifier.size(du(7.4f))
+                )
+            }
+            Icon(
+                Icons.Filled.SkipNext, null, tint = Color.White,
+                modifier = Modifier.size(du(8f)).clickable { vm.next() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SeekBar(fraction: Float, onSeek: (Float) -> Unit, modifier: Modifier = Modifier) {
+    Canvas(
+        modifier.pointerInput(Unit) {
+            detectTapGestures { off -> onSeek(off.x / size.width) }
+        }
+    ) {
+        val h = size.height * 0.18f
+        val cy = size.height / 2f
+        val f = fraction.coerceIn(0f, 1f)
+        drawRoundRect(
+            Color(0xFF2A3B7A), Offset(0f, cy - h / 2), Size(size.width, h), CornerRadius(h / 2)
+        )
+        drawRoundRect(
+            Brush.horizontalGradient(listOf(C.Cyan, C.Blue)),
+            Offset(0f, cy - h / 2), Size(size.width * f, h), CornerRadius(h / 2)
+        )
+        drawCircle(C.Cyan, radius = size.height * 0.3f, center = Offset(size.width * f, cy))
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bottom navigation
+// ---------------------------------------------------------------------------------------------
+@Composable
+fun BottomNav(vm: CarViewModel, modifier: Modifier = Modifier) {
+    val items = listOf(
+        Tab.Home to Icons.Filled.Home,
+        Tab.Maps to Icons.Filled.Place,
+        Tab.Music to Icons.Filled.MusicNote,
+        Tab.Phone to Icons.Filled.Phone,
+        Tab.Settings to Icons.Filled.Settings
+    )
+    val barShape = RoundedCornerShape(topStart = du(5f), topEnd = du(5f), bottomStart = du(2f), bottomEnd = du(2f))
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(barShape)
+            .background(Brush.verticalGradient(listOf(Color(0xFF0A1544), Color(0xFF050B24))))
+            .border(1.dp, Color(0x552F6BFF), barShape),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items.forEach { (tab, icon) ->
+            val selected = vm.tab == tab
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = du(5f), topEnd = du(2.5f)))
+                    .then(
+                        if (selected) Modifier.background(
+                            Brush.verticalGradient(listOf(Color(0x552F6BFF), Color(0x112F6BFF)))
+                        ) else Modifier
+                    )
+                    .clickable { vm.tab = tab },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(icon, null, tint = if (selected) Color.White else C.Dim, modifier = Modifier.size(du(5.6f)))
+                Text(
+                    tab.label,
+                    color = if (selected) Color.White else C.Dim,
+                    fontSize = su(3.1f),
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                )
+                if (selected) {
+                    Spacer(Modifier.height(du(0.4f)))
+                    Box(
+                        Modifier
+                            .width(du(9f))
+                            .height(du(0.5f))
+                            .background(C.Cyan)
+                    )
+                }
+            }
+        }
+    }
+}

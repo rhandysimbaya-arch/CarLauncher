@@ -1,6 +1,8 @@
 package com.rb.carlauncher
 
 import android.Manifest
+import android.app.role.RoleManager
+import android.provider.Settings
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -50,6 +52,12 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             vm.onPermissionsChanged()
+            maybeAskDefault()
+        }
+
+    private val roleLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            vm.refreshDefault()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,7 +72,13 @@ class MainActivity : ComponentActivity() {
             }
         })
 
-        setContent { CarApp(vm, onRequestPermissions = { requestPermissions() }) }
+        setContent {
+            CarApp(
+                vm,
+                onRequestPermissions = { requestPermissions() },
+                onSetDefaultLauncher = { requestDefaultLauncher() }
+            )
+        }
         requestPermissions()
     }
 
@@ -93,21 +107,48 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** On first launch, ask once to make this the default home app. */
+    private fun maybeAskDefault() {
+        if (vm.shouldAskDefault()) requestDefaultLauncher()
+    }
+
+    private fun requestDefaultLauncher() {
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val rm = getSystemService(RoleManager::class.java)
+                if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    if (!rm.isRoleHeld(RoleManager.ROLE_HOME)) roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_HOME))
+                    return
+                }
+            }
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun requestPermissions() {
         val wanted = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.RECORD_AUDIO
         )
         if (Build.VERSION.SDK_INT >= 31) wanted.add(Manifest.permission.BLUETOOTH_CONNECT)
         val missing = wanted.filter { !vm.has(it) }
-        if (missing.isEmpty()) vm.onPermissionsChanged() else permissionLauncher.launch(missing.toTypedArray())
+        if (missing.isEmpty()) {
+            vm.onPermissionsChanged()
+            maybeAskDefault()
+        } else {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
     }
 }
 
 @Composable
-fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit) {
+fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit, onSetDefaultLauncher: () -> Unit) {
     MaterialTheme(colorScheme = darkColorScheme()) {
         BoxWithConstraints(
             Modifier
@@ -121,7 +162,7 @@ fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit) {
                         .fillMaxSize()
                         .padding(horizontal = du(1.5f), vertical = du(1.2f))
                 ) {
-                    TopStatusBar(vm, Modifier.weight(0.12f))
+                    TopStatusBar(vm, Modifier.weight(0.12f), onRequestPermissions)
                     if (vm.theme == ThemeMode.Neon) {
                         Box(
                             Modifier
@@ -142,7 +183,7 @@ fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit) {
                             Tab.Music -> MusicScreen(vm)
                             Tab.Sound -> SoundScreen(vm)
                             Tab.Phone -> PhoneScreen(vm)
-                            Tab.Settings -> SettingsScreen(vm, onRequestPermissions)
+                            Tab.Settings -> SettingsScreen(vm, onRequestPermissions, onSetDefaultLauncher)
                         }
                     }
                     BottomNav(vm, Modifier.weight(0.14f))

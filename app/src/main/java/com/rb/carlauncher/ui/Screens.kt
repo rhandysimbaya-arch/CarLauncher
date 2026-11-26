@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,6 +67,7 @@ import com.rb.carlauncher.CarViewModel
 import com.rb.carlauncher.MapMode
 import com.rb.carlauncher.ThemeMode
 import com.rb.carlauncher.safeStart
+import org.osmdroid.views.MapView
 
 private fun Modifier.card(): Modifier = this.panel(RoundedCornerShape(24.dp))
 
@@ -77,85 +79,107 @@ fun MapsScreen(vm: CarViewModel) {
     val ctx = LocalContext.current
     var follow by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
     val keyboard = LocalSoftwareKeyboardController.current
     val shape = RoundedCornerShape(du(4f))
+    val night = vm.mapNight
+    val surface = if (night) Color(0xF0050A1C) else Color.White
+    val textCol = if (night) Color.White else Color(0xFF202124)
+    val hintCol = if (night) C.Dim else Color(0xFF70757A)
+    val chipShape = RoundedCornerShape(du(1.8f))
 
     Box(Modifier.fillMaxSize().clip(shape).border(1.5.dp, C.Blue.copy(alpha = 0.6f), shape)) {
-        NavMap(vm, Modifier.fillMaxSize(), follow = follow, zoom = 17.0, onUserTouch = { follow = false })
+        NavMap(
+            vm, Modifier.fillMaxSize(), follow = follow, zoom = 17.0,
+            onUserTouch = { follow = false }, onMapView = { mapView = it }
+        )
 
-        // search + results (top-left)
+        // current road label under the car
+        Text(
+            vm.roadName,
+            color = Color(0xFF1A5FD0), fontSize = su(2.8f), fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(y = du(10.2f))
+                .clip(RoundedCornerShape(du(1.4f)))
+                .background(Color(0xF2E8F0FE))
+                .padding(horizontal = du(1.6f), vertical = du(0.6f))
+        )
+
+        // top-left: maneuver banner while navigating, otherwise search
         Column(
             Modifier
                 .align(Alignment.TopStart)
                 .padding(du(1.6f))
-                .fillMaxWidth(0.46f)
+                .fillMaxWidth(0.44f)
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(du(2f)))
-                    .background(Color(0xF0050A1C))
-                    .border(1.dp, Color(0x772F6BFF), RoundedCornerShape(du(2f)))
-                    .padding(horizontal = du(1.6f), vertical = du(1.4f)),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Search, null, tint = C.Cyan, modifier = Modifier.size(du(5f)))
-                Spacer(Modifier.width(du(1.2f)))
-                Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) {
-                        Text("Search destination", color = C.Dim, fontSize = su(3.6f))
+            if (vm.nav != null) {
+                NavBanner(vm, Modifier.fillMaxWidth())
+            } else {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(50))
+                        .background(surface)
+                        .padding(horizontal = du(2f), vertical = du(1.4f)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Search, null, tint = Color(0xFF1A73E8), modifier = Modifier.size(du(4.8f)))
+                    Spacer(Modifier.width(du(1.2f)))
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) {
+                            Text("Search here", color = hintCol, fontSize = su(3.6f))
+                        }
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = TextStyle(color = textCol, fontSize = su(3.8f)),
+                            cursorBrush = SolidColor(Color(0xFF1A73E8)),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                keyboard?.hide()
+                                vm.search(query)
+                            }),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    BasicTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        singleLine = true,
-                        textStyle = TextStyle(color = Color.White, fontSize = su(3.8f)),
-                        cursorBrush = SolidColor(C.Cyan),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            keyboard?.hide()
-                            vm.search(query)
-                        }),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (query.isNotEmpty()) {
-                    Icon(
-                        Icons.Filled.Close, null, tint = Color.White,
-                        modifier = Modifier
-                            .size(du(4.6f))
-                            .clickable { query = ""; vm.clearResults() }
-                    )
+                    if (query.isNotEmpty()) {
+                        Icon(
+                            Icons.Filled.Close, null, tint = textCol,
+                            modifier = Modifier
+                                .size(du(4.4f))
+                                .clickable { query = ""; vm.clearResults() }
+                        )
+                    }
                 }
             }
 
-            val status = when {
-                vm.busy -> "Working..."
-                else -> vm.message
-            }
+            val status = if (vm.busy) "Working..." else vm.message
             if (status != null) {
                 Spacer(Modifier.height(du(1f)))
                 Text(
-                    status, color = Color.White, fontSize = su(3.2f),
+                    status, color = textCol, fontSize = su(3.2f),
                     modifier = Modifier
                         .clip(RoundedCornerShape(du(1.4f)))
-                        .background(Color(0xE0050A1C))
+                        .background(surface)
                         .padding(horizontal = du(1.6f), vertical = du(0.9f))
                 )
             }
 
-            if (vm.results.isNotEmpty()) {
+            if (vm.results.isNotEmpty() && vm.nav == null) {
                 Spacer(Modifier.height(du(1f)))
                 LazyColumn(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(du(2f)))
-                        .background(Color(0xF0050A1C))
+                        .background(surface)
                 ) {
                     items(vm.results) { place ->
                         Text(
                             place.name,
-                            color = Color.White,
+                            color = textCol,
                             fontSize = su(3.3f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -173,57 +197,50 @@ fun MapsScreen(vm: CarViewModel) {
             }
         }
 
-        // maneuver banner (top-right)
-        if (vm.nav != null) {
-            NavBanner(
-                vm,
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(du(1.6f))
-                    .fillMaxWidth(0.4f)
-            )
+        // top-right: Recenter pill
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(du(1.6f))
+                .clip(RoundedCornerShape(50))
+                .background(Color.Black)
+                .clickable { follow = true }
+                .padding(horizontal = du(3.6f), vertical = du(1.8f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Recenter", color = Color.White, fontSize = su(3.9f), fontWeight = FontWeight.Bold)
         }
 
-        EtaBar(
-            vm,
-            Modifier
-                .align(Alignment.BottomStart)
-                .padding(du(1.6f))
-                .fillMaxWidth(0.4f)
-        )
-
-        // view angle: Top / Heading / 3D + Street View
+        // right side: view chips (Top / Heading / 3D / Street / Day-Night)
         Column(
             Modifier
                 .align(Alignment.CenterEnd)
-                .padding(end = du(1.6f)),
+                .padding(end = du(1.6f), top = du(6f)),
+            horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(du(0.8f))
         ) {
             MapMode.values().forEach { m ->
                 val sel = vm.mapMode == m
                 Box(
                     Modifier
-                        .width(du(13f))
-                        .clip(RoundedCornerShape(du(1.6f)))
-                        .background(if (sel) C.Cyan else Color(0xEE050A1C))
-                        .border(1.dp, C.Blue, RoundedCornerShape(du(1.6f)))
-                        .clickable { vm.mapMode = m; follow = true }
-                        .padding(vertical = du(1.3f)),
+                        .width(du(12f))
+                        .clip(chipShape)
+                        .background(if (sel) Color(0xFF1A73E8) else surface)
+                        .clickable { vm.changeMapMode(m); follow = true }
+                        .padding(vertical = du(1.1f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        m.label,
-                        color = if (sel) Color(0xFF02060F) else Color.White,
-                        fontSize = su(3.2f), fontWeight = FontWeight.Bold
+                        m.label, color = if (sel) Color.White else textCol,
+                        fontSize = su(3f), fontWeight = FontWeight.Bold
                     )
                 }
             }
             Row(
                 Modifier
-                    .width(du(13f))
-                    .clip(RoundedCornerShape(du(1.6f)))
-                    .background(Color(0xEE050A1C))
-                    .border(1.dp, C.Blue, RoundedCornerShape(du(1.6f)))
+                    .width(du(12f))
+                    .clip(chipShape)
+                    .background(surface)
                     .clickable {
                         val loc = vm.location
                         if (loc != null) {
@@ -236,33 +253,57 @@ fun MapsScreen(vm: CarViewModel) {
                             ctx.safeStart(if (app.resolveActivity(ctx.packageManager) != null) app else web)
                         }
                     }
-                    .padding(vertical = du(1.2f)),
+                    .padding(vertical = du(1.1f)),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.Streetview, null, tint = C.Cyan, modifier = Modifier.size(du(3.8f)))
-                Spacer(Modifier.width(du(0.6f)))
-                Text("Street", color = Color.White, fontSize = su(3.0f), fontWeight = FontWeight.Bold)
+                Icon(Icons.Filled.Streetview, null, tint = Color(0xFF1A73E8), modifier = Modifier.size(du(3.4f)))
+                Spacer(Modifier.width(du(0.5f)))
+                Text("Street", color = textCol, fontSize = su(3f), fontWeight = FontWeight.Bold)
+            }
+            Box(
+                Modifier
+                    .width(du(12f))
+                    .clip(chipShape)
+                    .background(surface)
+                    .clickable { vm.toggleMapNight() }
+                    .padding(vertical = du(1.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(if (night) "Day" else "Night", color = textCol, fontSize = su(3f), fontWeight = FontWeight.Bold)
             }
         }
 
-        // recenter
-        Box(
+        // bottom-left: ETA
+        EtaBar(
+            vm,
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(du(1.6f))
+                .fillMaxWidth(0.4f)
+        )
+
+        // bottom-right: zoom +/-
+        Column(
             Modifier
                 .align(Alignment.BottomEnd)
-                .padding(du(1.6f))
-                .size(du(10f))
-                .clip(CircleShape)
-                .background(Color(0xEE050A1C))
-                .border(1.dp, C.Blue, CircleShape)
-                .clickable { follow = true },
-            contentAlignment = Alignment.Center
+                .padding(du(1.6f)),
+            verticalArrangement = Arrangement.spacedBy(du(1.2f))
         ) {
-            Icon(
-                Icons.Filled.MyLocation, null,
-                tint = if (follow) C.Cyan else Color.White,
-                modifier = Modifier.size(du(5.6f))
-            )
+            for ((label, delta) in listOf("+" to 1, "\u2212" to -1)) {
+                Box(
+                    Modifier
+                        .size(du(9.4f))
+                        .clip(CircleShape)
+                        .background(Color.Black)
+                        .clickable {
+                            if (delta > 0) mapView?.controller?.zoomIn() else mapView?.controller?.zoomOut()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, color = Color.White, fontSize = su(6.4f), fontWeight = FontWeight.Medium)
+                }
+            }
         }
     }
 }
@@ -448,7 +489,7 @@ private fun BigAction(
 // Settings + all apps
 // ---------------------------------------------------------------------------------------------
 @Composable
-fun SettingsScreen(vm: CarViewModel, onRequestPermissions: () -> Unit) {
+fun SettingsScreen(vm: CarViewModel, onRequestPermissions: () -> Unit, onSetDefaultLauncher: () -> Unit) {
     val ctx = LocalContext.current
     // re-read permission state when it changes
     @Suppress("UNUSED_VARIABLE") val tick = vm.permTick
@@ -472,9 +513,10 @@ fun SettingsScreen(vm: CarViewModel, onRequestPermissions: () -> Unit) {
                 }
             }
             item {
-                SettingRow("Default launcher", "Set Car Launcher as home app") {
-                    ctx.safeStart(Intent(Settings.ACTION_HOME_SETTINGS))
-                }
+                SettingRow(
+                    "Default launcher",
+                    if (vm.isDefaultHome) "Car Launcher is the default home app" else "Not default - tap to set Car Launcher as home app"
+                ) { onSetDefaultLauncher() }
             }
             item {
                 SettingRow("Theme", if (vm.theme == ThemeMode.Neon) "Neon Drive (tap for Classic)" else "Classic (tap for Neon Drive)") {

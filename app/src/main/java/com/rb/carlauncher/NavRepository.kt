@@ -41,6 +41,16 @@ object NavRepository {
         return out
     }
 
+    fun reverse(lat: Double, lon: Double): String? {
+        val o = JSONObject(get("https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json&zoom=17&addressdetails=1"))
+        val a = o.optJSONObject("address") ?: return null
+        for (k in listOf("road", "pedestrian", "footway", "residential", "neighbourhood", "suburb")) {
+            val v = a.optString(k)
+            if (v.isNotBlank()) return v
+        }
+        return null
+    }
+
     fun route(from: GeoPoint, to: GeoPoint, destName: String): NavState? {
         val url = "https://router.project-osrm.org/route/v1/driving/" +
             "${from.longitude},${from.latitude};${to.longitude},${to.latitude}" +

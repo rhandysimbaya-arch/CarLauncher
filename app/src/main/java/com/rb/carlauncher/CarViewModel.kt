@@ -21,6 +21,8 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.media.AudioManager
 import android.media.audiofx.AudioEffect
+import android.media.AudioDeviceInfo
+import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
@@ -28,9 +30,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.telephony.PhoneStateListener
-import android.telephony.SignalStrength
-import android.telephony.TelephonyManager
 import android.view.KeyEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -66,7 +65,18 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     // ---- UI state -------------------------------------------------------------------------
     var tab by mutableStateOf(Tab.Home)
 
-    var mapMode by mutableStateOf(MapMode.Heading)
+    var mapMode by mutableStateOf(
+        MapMode.values().firstOrNull { it.name == prefs.getString("mapMode", "") } ?: MapMode.Heading
+    )
+        private set
+    var mapNight by mutableStateOf(prefs.getBoolean("mapNight", false))
+        private set
+    var roadName by mutableStateOf("Unknown road")
+        private set
+    var isDefaultHome by mutableStateOf(false)
+        private set
+    var btNeedsPermission by mutableStateOf(false)
+        private set
 
     // boot intro
     var bootAnim by mutableStateOf(prefs.getBoolean("bootAnim", true))
@@ -103,7 +113,9 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var ambientTemp by mutableFloatStateOf(Float.NaN)
         private set
-    var signalLevel by mutableIntStateOf(0)
+    var wifiLevel by mutableIntStateOf(0)
+        private set
+    var wifiConnected by mutableStateOf(false)
         private set
     var btName by mutableStateOf<String?>(null)
         private set
@@ -171,7 +183,8 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     private var lastTripSave = 0L
     private var lastOffRouteCheck = 0L
     private var lastReroute = 0L
-    private var cellLevel = 0
+    private var lastRoadLoc: GeoPoint? = null
+    private var lastRoadTime = 0L
 
     private val locationManager get() = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
@@ -195,7 +208,14 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val btReceiver = object : BroadcastReceiver() {
+        @Suppress("DEPRECATION")
+        @SuppressLint("MissingPermission")
         override fun onReceive(c: Context, i: Intent) {
+            if (i.action == BluetoothDevice.ACTION_ACL_CONNECTED && btPermissionOk()) {
+                val d = i.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                val n = try { d?.name ?: d?.address } catch (_: SecurityException) { null }
+                if (n != null) btName = n
+            }
             main.postDelayed({ refreshBt() }, 1200)
         }
     }
@@ -217,11 +237,8 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
     }
 
-    @Suppress("DEPRECATION")
-    private val phoneListener = object : PhoneStateListener() {
-        override fun onSignalStrengthsChanged(s: SignalStrength?) {
-            if (s == null) return
-            cellLevel = if (Build.VERSION.SDK_INT >= 23) s.level else gsmToLevel(s.gsmSignalStrength)
+    private val wifiReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
             readSignal()
         }
     }
@@ -235,6 +252,10 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction("android.bluetooth.profile.action.CONNECTION_STATE_CHANGED")
+            addAction("android.bluetooth.a2dp-sink.profile.action.CONNECTION_STATE_CHANGED")
+            addAction("android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED")
+            addAction("android.bluetooth.headsetclient.profile.action.CONNECTION_STATE_CHANGED")
         }
         ContextCompat.registerReceiver(ctx, btReceiver, btFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
@@ -253,12 +274,14 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: Exception) {
         }
 
-        try {
-            @Suppress("DEPRECATION")
-            (ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager)
-                .listen(phoneListener, PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
-        } catch (_: Throwable) {
+        val wifiFilter = IntentFilter().apply {
+            addAction(WifiManager.RSSI_CHANGED_ACTION)
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
         }
+        ContextCompat.registerReceiver(ctx, wifiReceiver, wifiFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+
+        welcome.prepare()
 
         // no animation -> still greet by voice at start-up
         if (!bootActive && bootSound) welcome.play()
@@ -277,6 +300,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
                 readSignal()
                 checkMedia()
                 refreshVolume()
+                lookupRoad()
                 if (gpsFix && SystemClock.elapsedRealtime() - lastGpsTime > 5000) {
                     gpsFix = false
                     speedKmh = 0f
@@ -288,6 +312,10 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onResume() {
+        refreshDefault()
+        fx.open(0)
+        pushFx()
+        readSignal()
         startLocation()
         startSpectrum()
         refreshBt()
@@ -326,6 +354,47 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleBootSound() {
         bootSound = !bootSound
         prefs.edit().putBoolean("bootSound", bootSound).apply()
+    }
+
+    fun changeMapMode(m: MapMode) {
+        mapMode = m
+        prefs.edit().putString("mapMode", m.name).apply()
+    }
+
+    fun toggleMapNight() {
+        mapNight = !mapNight
+        prefs.edit().putBoolean("mapNight", mapNight).apply()
+    }
+
+    fun refreshDefault() {
+        try {
+            val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            val ri = ctx.packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)
+            isDefaultHome = ri?.activityInfo?.packageName == ctx.packageName
+        } catch (_: Exception) {
+        }
+    }
+
+    /** True once, on first launch, if we are not yet the default home app. */
+    fun shouldAskDefault(): Boolean {
+        refreshDefault()
+        if (isDefaultHome || prefs.getBoolean("askedHome", false)) return false
+        prefs.edit().putBoolean("askedHome", true).apply()
+        return true
+    }
+
+    private fun lookupRoad() {
+        val loc = location ?: return
+        if (nav != null || tab != Tab.Maps) return
+        val now = SystemClock.elapsedRealtime()
+        val last = lastRoadLoc
+        if (now - lastRoadTime < 15000 || (last != null && last.distanceToAsDouble(loc) < 40.0)) return
+        lastRoadTime = now
+        lastRoadLoc = loc
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) { runCatching { NavRepository.reverse(loc.latitude, loc.longitude) }.getOrNull() }
+            roadName = r ?: "Unknown road"
+        }
     }
 
     fun toggleTheme() {
@@ -368,8 +437,20 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         val p = GeoPoint(l.latitude, l.longitude)
         location = p
         if (isGps) {
-            val kmh = if (l.hasSpeed()) l.speed * 3.6f else 0f
-            speedKmh = if (kmh < 2f) 0f else kmh
+            val prevFix = lastGpsLoc
+            var kmh = speedKmh
+            val poorSpeed = Build.VERSION.SDK_INT >= 26 && l.hasSpeedAccuracy() && l.speedAccuracyMetersPerSecond > 3f
+            if (!poorSpeed) {
+                if (l.hasSpeed()) {
+                    kmh = l.speed * 3.6f // Doppler speed from the GPS chip
+                } else if (prevFix != null) {
+                    val dt = (l.time - prevFix.time) / 1000f
+                    if (dt in 0.3f..5f) kmh = prevFix.distanceTo(l) / dt * 3.6f
+                }
+            }
+            val target = if (kmh < 1.8f) 0f else kmh
+            // light smoothing: removes GPS jitter without visible lag
+            speedKmh = if (target == 0f) 0f else if (speedKmh == 0f) target else speedKmh * 0.3f + target * 0.7f
             if (l.hasBearing() && kmh > 5f) bearing = l.bearing
             if (speedKmh > maxKmh) maxKmh = speedKmh
             updateTrip(l)
@@ -415,74 +496,104 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         if (t != Int.MIN_VALUE) batteryTemp = t / 10f
     }
 
-    private fun gsmToLevel(gsm: Int): Int = when {
-        gsm == 99 -> 0
-        gsm >= 18 -> 4
-        gsm >= 12 -> 3
-        gsm >= 8 -> 2
-        gsm >= 4 -> 1
-        else -> 0
-    }
-
     @Suppress("DEPRECATION")
     private fun readSignal() {
         try {
-            if (Build.VERSION.SDK_INT >= 28) {
-                val s = (ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager).signalStrength
-                if (s != null) cellLevel = s.level
-            }
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val info = wm.connectionInfo
+            val connected = cm.getNetworkInfo(ConnectivityManager.TYPE_WIFI)?.isConnected == true &&
+                info != null && info.networkId != -1
+            wifiConnected = connected
+            wifiLevel = if (connected) WifiManager.calculateSignalLevel(info.rssi, 5) else 0
         } catch (_: Throwable) {
+            wifiConnected = false
+            wifiLevel = 0
         }
-        var wifiLevel = 0
-        try {
-            val wm = ctx.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            val info = wm?.connectionInfo
-            if (info != null && info.networkId != -1) wifiLevel = WifiManager.calculateSignalLevel(info.rssi, 5)
-        } catch (_: Throwable) {
-        }
-        signalLevel = if (cellLevel > 0) cellLevel else wifiLevel
     }
+
+    private fun btPermissionOk() = Build.VERSION.SDK_INT < 31 || has(Manifest.permission.BLUETOOTH_CONNECT)
+
+    // A2DP/HEADSET = phone side; 11 = A2DP sink, 16 = hands-free client (tablet / head-unit side)
+    private val btProfiles = intArrayOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET, 11, 16)
 
     @SuppressLint("MissingPermission")
     private fun refreshBt() {
-        if (Build.VERSION.SDK_INT >= 31 && !has(Manifest.permission.BLUETOOTH_CONNECT)) {
+        if (!btPermissionOk()) {
             btName = null
+            btNeedsPermission = true
             return
         }
+        btNeedsPermission = false
         try {
             val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
             if (adapter == null || !adapter.isEnabled) {
                 btName = null
                 return
             }
-            queryProfile(adapter, BluetoothProfile.A2DP) { n ->
-                if (n != null) {
-                    btName = n
-                } else {
-                    queryProfile(adapter, BluetoothProfile.HEADSET) { n2 -> btName = n2 }
-                }
-            }
+            probeBt(adapter, 0)
         } catch (e: Exception) {
             btName = null
         }
     }
 
+    private fun probeBt(adapter: BluetoothAdapter, idx: Int) {
+        if (idx >= btProfiles.size) {
+            btName = fallbackBtName(adapter)
+            return
+        }
+        queryProfile(adapter, btProfiles[idx]) { n ->
+            if (n != null) btName = n else probeBt(adapter, idx + 1)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun fallbackBtName(adapter: BluetoothAdapter): String? {
+        try {
+            if (Build.VERSION.SDK_INT >= 23) {
+                val d = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull {
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                }
+                if (d != null) return d.productName?.toString()?.ifBlank { null } ?: "Bluetooth audio"
+            }
+        } catch (_: Throwable) {
+        }
+        try {
+            for (d in adapter.bondedDevices) {
+                val connected = d.javaClass.getMethod("isConnected").invoke(d) as? Boolean
+                if (connected == true) return d.name ?: d.address
+            }
+        } catch (_: Throwable) {
+        }
+        return null
+    }
+
     @SuppressLint("MissingPermission")
     private fun queryProfile(adapter: BluetoothAdapter, profile: Int, done: (String?) -> Unit) {
-        val ok = adapter.getProfileProxy(ctx, object : BluetoothProfile.ServiceListener {
-            override fun onServiceConnected(p: Int, proxy: BluetoothProfile) {
-                val name = try {
-                    proxy.connectedDevices.firstOrNull()?.let { it.name ?: it.address ?: "Bluetooth device" }
-                } catch (e: SecurityException) {
-                    null
+        var fired = false
+        fun finish(n: String?) {
+            if (fired) return
+            fired = true
+            done(n)
+        }
+        val ok = try {
+            adapter.getProfileProxy(ctx, object : BluetoothProfile.ServiceListener {
+                override fun onServiceConnected(p: Int, proxy: BluetoothProfile) {
+                    val name = try {
+                        proxy.connectedDevices.firstOrNull()?.let { it.name ?: it.address ?: "Bluetooth device" }
+                    } catch (e: Throwable) {
+                        null
+                    }
+                    try { adapter.closeProfileProxy(p, proxy) } catch (_: Throwable) {}
+                    main.post { finish(name) }
                 }
-                adapter.closeProfileProxy(p, proxy)
-                main.post { done(name) }
-            }
 
-            override fun onServiceDisconnected(p: Int) {}
-        }, profile)
-        if (!ok) done(null)
+                override fun onServiceDisconnected(p: Int) {}
+            }, profile)
+        } catch (e: Throwable) {
+            false
+        }
+        if (!ok) finish(null) else main.postDelayed({ finish(null) }, 1500)
     }
 
     // ---- media -----------------------------------------------------------------------------
@@ -680,6 +791,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         nav = a
+        a.steps.getOrNull((a.stepIndex - 1).coerceAtLeast(0))?.name?.takeIf { it.isNotBlank() }?.let { roadName = it }
         val now = SystemClock.elapsedRealtime()
         if (now - lastOffRouteCheck > 3000) {
             lastOffRouteCheck = now
@@ -738,6 +850,7 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
             ctx.unregisterReceiver(batteryReceiver)
             ctx.unregisterReceiver(btReceiver)
             ctx.unregisterReceiver(fxReceiver)
+            ctx.unregisterReceiver(wifiReceiver)
             (ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager).unregisterListener(sensorListener)
         } catch (_: Exception) {
         }

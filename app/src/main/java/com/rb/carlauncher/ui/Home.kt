@@ -94,7 +94,7 @@ import kotlin.math.roundToInt
 // Status bar
 // ---------------------------------------------------------------------------------------------
 @Composable
-fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier) {
+fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier, onRequestPermissions: () -> Unit = {}) {
     val ctx = LocalContext.current
     val now by produceState(initialValue = Date()) {
         while (true) {
@@ -132,7 +132,9 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(du(2.5f)))
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable { ctx.safeStart(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            modifier = Modifier.clickable {
+                if (vm.btNeedsPermission) onRequestPermissions() else ctx.safeStart(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            }
         ) {
             Icon(Icons.Filled.Bluetooth, null, tint = C.Cyan, modifier = Modifier.size(du(5f)))
             Spacer(Modifier.width(du(1f)))
@@ -142,7 +144,7 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier) {
                     color = Color.White, fontSize = su(2.5f)
                 )
                 Text(
-                    vm.btName ?: "Not connected",
+                    vm.btName ?: (if (vm.btNeedsPermission) "Tap to allow" else "Not connected"),
                     color = C.Dim, fontSize = su(2.9f), maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
@@ -158,7 +160,7 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(du(2.5f)))
         VDivider()
         Spacer(Modifier.width(du(2.5f)))
-        SignalBars(vm.signalLevel)
+        WifiIcon(vm.wifiLevel, vm.wifiConnected)
         Spacer(Modifier.width(du(2f)))
         BatteryIcon(vm.batteryPct)
     }
@@ -175,19 +177,29 @@ fun VDivider() {
 }
 
 @Composable
-private fun SignalBars(level: Int) {
-    Canvas(Modifier.size(du(4.6f), du(4.2f))) {
-        val bars = 5
-        val gap = size.width * 0.07f
-        val bw = (size.width - gap * (bars - 1)) / bars
-        for (i in 0 until bars) {
-            val bh = size.height * (0.28f + 0.72f * (i + 1) / bars)
-            val on = i <= level
-            drawRoundRect(
-                color = if (on) Color.White else Color.White.copy(alpha = 0.25f),
-                topLeft = Offset(i * (bw + gap), size.height - bh),
-                size = Size(bw, bh),
-                cornerRadius = CornerRadius(bw * 0.3f)
+private fun WifiIcon(level: Int, connected: Boolean) {
+    Canvas(Modifier.size(du(5.2f), du(4.2f))) {
+        val cx = size.width / 2f
+        val cy = size.height * 0.92f
+        val sw = size.height * 0.12f
+        val on = Color.White
+        val off = Color.White.copy(alpha = 0.25f)
+        val radii = listOf(size.height * 0.36f, size.height * 0.64f, size.height * 0.92f)
+        for (i in radii.indices) {
+            val lit = connected && level >= i + 1
+            val r = radii[i]
+            drawArc(
+                color = if (lit) on else off,
+                startAngle = 225f, sweepAngle = 90f, useCenter = false,
+                topLeft = Offset(cx - r, cy - r), size = Size(r * 2, r * 2),
+                style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            )
+        }
+        drawCircle(if (connected) on else off, sw * 0.95f, Offset(cx, cy - sw * 0.2f))
+        if (!connected) {
+            drawLine(
+                C.Red, Offset(size.width * 0.12f, size.height * 0.1f), Offset(size.width * 0.88f, size.height * 0.95f),
+                strokeWidth = sw * 0.8f, cap = androidx.compose.ui.graphics.StrokeCap.Round
             )
         }
     }
@@ -261,7 +273,7 @@ private fun SpeedPanel(vm: CarViewModel, modifier: Modifier) {
 @Composable
 private fun NavCard(vm: CarViewModel, modifier: Modifier) {
     Box(modifier.panel(RoundedCornerShape(du(4f)))) {
-        NavMap(vm, Modifier.fillMaxSize(), follow = true, zoom = 17.0)
+        NavMap(vm, Modifier.fillMaxSize(), follow = true, zoom = 17.0, night = true)
         // transparent layer: tapping the card opens the full Maps screen
         Box(
             Modifier

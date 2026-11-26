@@ -1,5 +1,7 @@
 package com.rb.carlauncher
 
+import android.net.Uri
+
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -53,4 +55,17 @@ fun arrowAngle(s: Step): Float = when (s.modifier) {
     "sharp right" -> 135f
     "uturn" -> 180f
     else -> 0f
+}
+
+/** Hand the current destination to an installed navigation app (turn-by-turn there). */
+fun Context.openExternalNav(pkg: String, lat: Double, lon: Double) {
+    val uri = if (pkg == "com.waze") "https://waze.com/ul?ll=$lat,$lon&navigate=yes"
+    else "google.navigation:q=$lat,$lon&mode=d"
+    val i = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        startActivity(i)
+    } catch (e: Exception) {
+        // not installed: let the user pick any app that handles a geo link
+        safeStart(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=$lat,$lon")), "Navigate with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
 }

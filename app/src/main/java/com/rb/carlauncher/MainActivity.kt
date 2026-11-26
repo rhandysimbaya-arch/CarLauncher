@@ -1,6 +1,9 @@
 package com.rb.carlauncher
 
 import android.Manifest
+import android.widget.Toast
+import android.os.Looper
+import android.os.Handler
 import android.app.role.RoleManager
 import android.provider.Settings
 import android.content.Intent
@@ -79,7 +82,37 @@ class MainActivity : ComponentActivity() {
                 onSetDefaultLauncher = { requestDefaultLauncher() }
             )
         }
+        vm.inSplit = if (Build.VERSION.SDK_INT >= 24) isInMultiWindowMode else false
+        vm.onSplitNav = { startSplitNav(it) }
+        vm.onCloseSplit = { closeSplit() }
         requestPermissions()
+    }
+
+    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        vm.inSplit = isInMultiWindowMode
+    }
+
+    /** Dashboard on one half, navigation app on the other. The UI re-scales automatically. */
+    private fun startSplitNav(pkg: String) {
+        val nav = vm.nav
+        val lat = nav?.dest?.latitude
+        val lon = nav?.dest?.longitude
+        if (vm.inSplit) {
+            openExternalNav(pkg, lat, lon, adjacent = true)
+        } else if (SplitService.instance != null) {
+            SplitService.toggleSplit()
+            Handler(Looper.getMainLooper()).postDelayed({ openExternalNav(pkg, lat, lon, adjacent = true) }, 1000)
+        } else {
+            Toast.makeText(this, "Turn on 'Car Launcher split screen' in Accessibility to use split screen", Toast.LENGTH_LONG).show()
+            try { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
+        }
+    }
+
+    private fun closeSplit() {
+        if (!SplitService.toggleSplit()) {
+            Toast.makeText(this, "Drag the divider to the edge to close split screen", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() {
@@ -155,7 +188,8 @@ fun CarApp(vm: CarViewModel, onRequestPermissions: () -> Unit, onSetDefaultLaunc
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF030818), Color(0xFF010208))))
         ) {
-            val u = maxHeight.value / 100f
+            // scale by height, but also shrink when the window is narrow (split screen)
+            val u = minOf(maxHeight.value / 100f, maxWidth.value / 150f)
             CompositionLocalProvider(LocalU provides u, LocalNeon provides (vm.theme == ThemeMode.Neon)) {
                 Column(
                     Modifier

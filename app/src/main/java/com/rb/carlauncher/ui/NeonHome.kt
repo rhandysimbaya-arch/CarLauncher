@@ -206,9 +206,11 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
                 SeekBar(
                     fraction = if (m.durationMs > 0) pos.toFloat() / m.durationMs else 0f,
                     onSeek = { vm.seekFraction(it) },
+                    bars = vm.spectrum,
+                    playing = m.playing,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(du(3.4f))
+                        .height(du(6.5f))
                 )
                 Row(Modifier.fillMaxWidth()) {
                     Text(formatClock(pos), color = Color.White, fontSize = su(3.1f))

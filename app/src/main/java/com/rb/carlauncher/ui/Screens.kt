@@ -262,14 +262,26 @@ fun MapsScreen(vm: CarViewModel) {
                 Spacer(Modifier.width(du(0.5f)))
                 Text("Street", color = textCol, fontSize = su(3f), fontWeight = FontWeight.Bold)
             }
-            vm.nav?.let { nv ->
-                for ((label, pkg) in listOf("Google Maps" to "com.google.android.apps.maps", "Waze" to "com.waze")) {
+            if (vm.inSplit) {
+                Box(
+                    Modifier
+                        .width(du(12f))
+                        .clip(chipShape)
+                        .background(Color(0xFFD93025))
+                        .clickable { vm.onCloseSplit() }
+                        .padding(vertical = du(1.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Close split", color = Color.White, fontSize = su(2.6f), fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            } else {
+                for ((label, pkg) in listOf("Split: Maps" to "com.google.android.apps.maps", "Split: Waze" to "com.waze")) {
                     Box(
                         Modifier
                             .width(du(12f))
                             .clip(chipShape)
                             .background(Color(0xFF1A73E8))
-                            .clickable { ctx.openExternalNav(pkg, nv.dest.latitude, nv.dest.longitude) }
+                            .clickable { vm.onSplitNav(pkg) }
                             .padding(vertical = du(1.1f)),
                         contentAlignment = Alignment.Center
                     ) {

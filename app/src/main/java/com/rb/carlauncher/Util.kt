@@ -57,15 +57,18 @@ fun arrowAngle(s: Step): Float = when (s.modifier) {
     else -> 0f
 }
 
-/** Hand the current destination to an installed navigation app (turn-by-turn there). */
-fun Context.openExternalNav(pkg: String, lat: Double, lon: Double) {
-    val uri = if (pkg == "com.waze") "https://waze.com/ul?ll=$lat,$lon&navigate=yes"
-    else "google.navigation:q=$lat,$lon&mode=d"
-    val i = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+/** Open a navigation app (to a destination if given). adjacent = in the other half of split screen. */
+fun Context.openExternalNav(pkg: String, lat: Double?, lon: Double?, adjacent: Boolean = false) {
+    var flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    if (adjacent) flags = flags or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+    val i = if (lat != null && lon != null) {
+        val uri = if (pkg == "com.waze") "https://waze.com/ul?ll=$lat,$lon&navigate=yes"
+        else "google.navigation:q=$lat,$lon&mode=d"
+        Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg)
+    } else packageManager.getLaunchIntentForPackage(pkg)
     try {
-        startActivity(i)
+        startActivity((i ?: throw IllegalStateException("not installed")).addFlags(flags))
     } catch (e: Exception) {
-        // not installed: let the user pick any app that handles a geo link
-        safeStart(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=$lat,$lon")), "Navigate with").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        Toast.makeText(this, "Navigation app not installed", Toast.LENGTH_SHORT).show()
     }
 }

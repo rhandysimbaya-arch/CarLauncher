@@ -116,6 +116,13 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier, onRequestPermi
             .padding(horizontal = du(2.5f)),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (vm.inSplit) {
+            Icon(
+                Icons.Filled.Close, null, tint = Color(0xFFFF6B6B),
+                modifier = Modifier.size(du(5.6f)).clickable { vm.onCloseSplit() }
+            )
+            Spacer(Modifier.width(du(1.5f)))
+        }
         Icon(
             Icons.Filled.Home, null, tint = Color.White,
             modifier = Modifier
@@ -533,9 +540,11 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
         SeekBar(
             fraction = if (m.durationMs > 0) pos.toFloat() / m.durationMs else 0f,
             onSeek = { vm.seekFraction(it) },
+            bars = vm.spectrum,
+            playing = m.playing,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(du(3.6f))
+                .height(du(7f))
         )
         Row(Modifier.fillMaxWidth()) {
             Text(formatClock(pos), color = Color.White, fontSize = su(3.2f))
@@ -573,24 +582,67 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
     }
 }
 
+/** Music progress: orange track with a live sound wave rising above the played part, white-ringed thumb. */
 @Composable
-fun SeekBar(fraction: Float, onSeek: (Float) -> Unit, modifier: Modifier = Modifier) {
+fun SeekBar(
+    fraction: Float,
+    onSeek: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    bars: FloatArray = FloatArray(0),
+    playing: Boolean = false
+) {
+    var phase by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    androidx.compose.runtime.LaunchedEffect(playing) {
+        if (!playing) return@LaunchedEffect
+        var last = androidx.compose.runtime.withFrameNanos { it }
+        while (true) {
+            val now = androidx.compose.runtime.withFrameNanos { it }
+            phase += (now - last) / 1e9f * 3.2f
+            last = now
+        }
+    }
+    val energy = if (!playing) 0f else if (bars.isEmpty()) 0.35f else maxOf(0.2f, bars.average().toFloat().coerceIn(0f, 1f))
     Canvas(
         modifier.pointerInput(Unit) {
             detectTapGestures { off -> onSeek(off.x / size.width) }
         }
     ) {
-        val h = size.height * 0.18f
-        val cy = size.height / 2f
+        val h = size.height * 0.16f
+        val cy = size.height * 0.74f
+        val pad = size.height * 0.2f
+        val w = size.width - pad * 2
         val f = fraction.coerceIn(0f, 1f)
+        val px = pad + w * f
+        val orange = Color(0xFFFF6A00)
+        // remaining track
+        drawRoundRect(Color(0x55FFFFFF), Offset(pad, cy - h / 2), Size(w, h), CornerRadius(h / 2))
+        // sound wave above the played part
+        if (px > pad + 4f) {
+            val path = androidx.compose.ui.graphics.Path()
+            path.moveTo(pad, cy - h / 2)
+            var x = pad
+            val maxAmp = size.height * 0.62f
+            while (x <= px) {
+                val rel = (x - pad) / w
+                val b = if (bars.isEmpty()) 0.5f else bars[(rel * (bars.size - 1)).toInt().coerceIn(0, bars.size - 1)].coerceIn(0f, 1f)
+                val wave = 0.5f + 0.5f * kotlin.math.sin(x * 0.045f + phase) * kotlin.math.sin(x * 0.011f - phase * 0.6f)
+                val edge = minOf(1f, (x - pad) / 30f, (px - x) / 30f + 0.15f).coerceAtLeast(0f)
+                val amp = maxAmp * energy * (0.25f + 0.75f * b) * wave * edge
+                path.lineTo(x, cy - h / 2 - amp)
+                x += 3f
+            }
+            path.lineTo(px, cy - h / 2)
+            path.close()
+            drawPath(path, Brush.verticalGradient(listOf(Color(0xFFFFE066).copy(alpha = 0.95f), orange.copy(alpha = 0.85f)), startY = cy - maxAmp, endY = cy))
+        }
+        // played track
         drawRoundRect(
-            Color(0xFF2A3B7A), Offset(0f, cy - h / 2), Size(size.width, h), CornerRadius(h / 2)
+            Brush.horizontalGradient(listOf(Color(0xFFE85D00), Color(0xFFFF8A1F)), startX = pad, endX = pad + w),
+            Offset(pad, cy - h / 2), Size(px - pad, h), CornerRadius(h / 2)
         )
-        drawRoundRect(
-            Brush.horizontalGradient(listOf(C.Cyan, C.Blue)),
-            Offset(0f, cy - h / 2), Size(size.width * f, h), CornerRadius(h / 2)
-        )
-        drawCircle(C.Cyan, radius = size.height * 0.3f, center = Offset(size.width * f, cy))
+        // thumb
+        drawCircle(Color.White, size.height * 0.2f, Offset(px, cy))
+        drawCircle(orange, size.height * 0.135f, Offset(px, cy))
     }
 }
 

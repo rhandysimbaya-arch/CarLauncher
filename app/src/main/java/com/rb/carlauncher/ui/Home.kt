@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -104,6 +106,7 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier, onRequestPermi
     }
     val timeFmt = remember { SimpleDateFormat("h:mm", Locale.US) }
     val ampmFmt = remember { SimpleDateFormat("a", Locale.US) }
+    val dateFmt = remember { SimpleDateFormat("MMMM d, yyyy", Locale.US) }
     val big = su(4.8f)
     val small = su(3.4f)
 
@@ -120,13 +123,21 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier, onRequestPermi
                 .clickable { vm.tab = Tab.Home }
         )
         Spacer(Modifier.width(du(3f)))
-        Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = big, fontWeight = FontWeight.Medium)) { append(timeFmt.format(now)) }
-                withStyle(SpanStyle(fontSize = small)) { append(" " + ampmFmt.format(now).uppercase(Locale.US)) }
-            },
-            color = Color.White
-        )
+        Column(modifier = Modifier.width(IntrinsicSize.Max)) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(fontSize = big, fontWeight = FontWeight.Medium)) { append(timeFmt.format(now)) }
+                    withStyle(SpanStyle(fontSize = small)) { append(" " + ampmFmt.format(now).uppercase(Locale.US)) }
+                },
+                color = Color.White
+            )
+            // date: shrinks to fit exactly the width of the time above
+            Text(
+                dateFmt.format(now),
+                color = C.Dim, fontSize = su(2.3f), maxLines = 1, softWrap = false,
+                modifier = Modifier.width(0.dp).wrapContentWidth(unbounded = true, align = Alignment.Start)
+            )
+        }
         Spacer(Modifier.width(du(2.5f)))
         VDivider()
         Spacer(Modifier.width(du(2.5f)))
@@ -151,6 +162,10 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier, onRequestPermi
         }
         Spacer(Modifier.weight(1f))
 
+        VolumeSlider(vm, Modifier.height(du(6f)))
+        Spacer(Modifier.width(du(2.5f)))
+        VDivider()
+        Spacer(Modifier.width(du(2.5f)))
         val t = if (!vm.ambientTemp.isNaN()) vm.ambientTemp else vm.batteryTemp
         Icon(Icons.Filled.Thermostat, null, tint = C.Cyan, modifier = Modifier.size(du(5f)))
         Text(
@@ -482,19 +497,7 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(du(2f)))
 
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(du(18f))
-                    .clip(artShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFFFF7A3D), Color(0xFFB02BFF), Color(0xFF2F6BFF)))),
-                contentAlignment = Alignment.Center
-            ) {
-                if (art != null) {
-                    Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                } else {
-                    Icon(Icons.Filled.MusicNote, null, tint = Color.White, modifier = Modifier.size(du(8f)))
-                }
-            }
+            SpinningDisc(vm, art, m.playing, Modifier.size(du(24f)))
             Spacer(Modifier.width(du(2f)))
             Column(Modifier.weight(1f)) {
                 if (m.available) {

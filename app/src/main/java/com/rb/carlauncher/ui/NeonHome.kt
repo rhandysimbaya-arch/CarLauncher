@@ -167,20 +167,7 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
             .padding(du(1.8f)),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier
-                .size(du(21f))
-                .clip(artShape)
-                .background(Brush.linearGradient(listOf(Color(0xFFFF7A3D), Color(0xFFB02BFF), Color(0xFF2F6BFF))))
-                .border(1.5.dp, C.Blue, artShape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (art != null) {
-                Image(art, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            } else {
-                Icon(Icons.Filled.MusicNote, null, tint = Color.White, modifier = Modifier.size(du(8f)))
-            }
-        }
+        SpinningDisc(vm, art, m.playing, Modifier.size(du(25f)))
         Spacer(Modifier.width(du(2.2f)))
         Column(
             Modifier

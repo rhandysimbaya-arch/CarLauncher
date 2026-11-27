@@ -42,7 +42,7 @@ import kotlin.math.sin
 fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier, neon: Boolean = false) {
     val shown by animateFloatAsState(
         targetValue = speed.coerceIn(0f, 200f),
-        animationSpec = tween(450),
+        animationSpec = tween(160),
         label = "speed"
     )
     BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
@@ -91,6 +91,16 @@ fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier, neon:
                 drawCircle(C.Blue.copy(alpha = 0.45f), radius * 0.62f, c, style = Stroke(stroke * 0.12f))
             }
 
+            // outer bezel
+            drawCircle(
+                Brush.sweepGradient(
+                    listOf(Color(0xFF1B2A66), Color(0xFF5E7BFF), Color(0xFF0B1235), Color(0xFF3A52B8), Color(0xFF1B2A66)),
+                    center = c
+                ),
+                radius, c, style = Stroke(radius * 0.016f)
+            )
+            drawCircle(Color.White.copy(alpha = 0.06f), radius * 0.965f, c, style = Stroke(radius * 0.01f))
+
             // track
             drawArc(
                 color = Color(0xFF101C48),
@@ -138,7 +148,8 @@ fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier, neon:
                     (c.y + (tickOuter - len) * sin(a)).toFloat()
                 )
                 drawLine(
-                    color = Color.White.copy(alpha = if (major) 0.9f else 0.45f),
+                    color = if (i / 40f <= shown / 200f) (if (neon) C.Cyan else Color.White).copy(alpha = if (major) 1f else 0.8f)
+                    else Color.White.copy(alpha = if (major) 0.55f else 0.25f),
                     start = p1,
                     end = p2,
                     strokeWidth = if (major) stroke * 0.14f else stroke * 0.08f
@@ -163,17 +174,37 @@ fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier, neon:
                 }
             }
 
-            // needle
+            // glowing tip at the end of the progress arc
+            if (prog > 0.5f) {
+                val ta = Math.toRadians((start + prog).toDouble())
+                val tp = Offset((c.x + arcR * cos(ta)).toFloat(), (c.y + arcR * sin(ta)).toFloat())
+                drawCircle(Color.White.copy(alpha = 0.25f), stroke * 1.25f, tp)
+                drawCircle(Color.White, stroke * 0.42f, tp)
+            }
+
+            // tapered needle pointing at the current speed
             val na = Math.toRadians((start + sweep * shown / 200f).toDouble())
-            val n1 = Offset((c.x + radius * 0.50f * cos(na)).toFloat(), (c.y + radius * 0.50f * sin(na)).toFloat())
-            val n2 = Offset((c.x + radius * 0.64f * cos(na)).toFloat(), (c.y + radius * 0.64f * sin(na)).toFloat())
-            drawLine((if (neon) C.Cyan else Color(0xFF6FB6FF)).copy(alpha = 0.4f), n1, n2, strokeWidth = stroke * 0.7f, cap = StrokeCap.Round)
-            drawLine(Color.White, n1, n2, strokeWidth = stroke * 0.24f, cap = StrokeCap.Round)
+            val dirX = cos(na).toFloat()
+            val dirY = sin(na).toFloat()
+            val perpX = -dirY
+            val perpY = dirX
+            val r0 = radius * 0.50f
+            val r1 = radius * 0.66f
+            val w0 = stroke * 0.30f
+            val tip = Offset(c.x + dirX * r1, c.y + dirY * r1)
+            val b1 = Offset(c.x + dirX * r0 + perpX * w0, c.y + dirY * r0 + perpY * w0)
+            val b2 = Offset(c.x + dirX * r0 - perpX * w0, c.y + dirY * r0 - perpY * w0)
+            val needle = androidx.compose.ui.graphics.Path().apply {
+                moveTo(b1.x, b1.y); lineTo(tip.x, tip.y); lineTo(b2.x, b2.y); close()
+            }
+            drawLine((if (neon) C.Cyan else Color(0xFF6FB6FF)).copy(alpha = 0.35f),
+                Offset(c.x + dirX * r0, c.y + dirY * r0), tip, strokeWidth = stroke * 0.9f, cap = StrokeCap.Round)
+            drawPath(needle, Color.White)
         }
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.offset(y = -(r * 0.06f))
+            modifier = Modifier.offset(y = (r * 0.02f))
         ) {
             Text(
                 text = speed.roundToInt().toString(),
@@ -183,25 +214,12 @@ fun Speedometer(speed: Float, gear: String, modifier: Modifier = Modifier, neon:
                 fontStyle = FontStyle.Italic
             )
             Text(
-                text = "km/h",
-                color = Color.White,
-                fontSize = (r.value * 0.15f).sp
+                text = "KM/H",
+                color = if (neon) C.Cyan else Color(0xFF8FB8FF),
+                fontSize = (r.value * 0.13f).sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 3.sp
             )
-        }
-
-        val gearShape = RoundedCornerShape(topStart = r * 0.12f, topEnd = r * 0.12f, bottomStart = r * 0.04f, bottomEnd = r * 0.04f)
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = r * 0.03f)
-                .width(r * 0.44f)
-                .height(r * 0.25f)
-                .clip(gearShape)
-                .background(Color(0xFF0A1C4E))
-                .border(1.5.dp, C.Blue, gearShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(gear, color = Color.White, fontSize = (r.value * 0.19f).sp, fontWeight = FontWeight.Bold)
         }
     }
 }

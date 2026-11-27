@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Car Launcher</string>
-    <string name="split_service_desc">Lets Car Launcher open and close split-screen so a navigation app can sit beside the dashboard. It does not read your screen.</string>
 </resources>

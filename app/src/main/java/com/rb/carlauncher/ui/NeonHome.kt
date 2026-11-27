@@ -210,7 +210,7 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
                     playing = m.playing,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(du(6.5f))
+                        .height(du(6f))
                 )
                 Row(Modifier.fillMaxWidth()) {
                     Text(formatClock(pos), color = Color.White, fontSize = su(3.1f))
@@ -225,11 +225,11 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
             ) {
                 Icon(
                     Icons.Filled.SkipPrevious, null, tint = Color.White,
-                    modifier = Modifier.size(du(7.4f)).clickable { vm.previous() }
+                    modifier = Modifier.size(du(10f)).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).clickable { vm.previous() }.padding(du(1.1f))
                 )
                 Box(
                     Modifier
-                        .size(du(10.4f))
+                        .size(du(13f))
                         .drawBehind { drawCircle(C.Cyan.copy(alpha = 0.16f), size.minDimension * 0.62f) }
                         .border(2.dp, C.Cyan, CircleShape)
                         .clip(CircleShape)
@@ -238,12 +238,12 @@ private fun NeonMusicCard(vm: CarViewModel, modifier: Modifier) {
                 ) {
                     Icon(
                         if (m.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null,
-                        tint = Color.White, modifier = Modifier.size(du(6.8f))
+                        tint = Color.White, modifier = Modifier.size(du(8.4f))
                     )
                 }
                 Icon(
                     Icons.Filled.SkipNext, null, tint = Color.White,
-                    modifier = Modifier.size(du(7.4f)).clickable { vm.next() }
+                    modifier = Modifier.size(du(10f)).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).clickable { vm.next() }.padding(du(1.1f))
                 )
             }
         }

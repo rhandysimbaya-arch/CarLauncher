@@ -116,13 +116,6 @@ fun TopStatusBar(vm: CarViewModel, modifier: Modifier = Modifier, onRequestPermi
             .padding(horizontal = du(2.5f)),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (vm.inSplit) {
-            Icon(
-                Icons.Filled.Close, null, tint = Color(0xFFFF6B6B),
-                modifier = Modifier.size(du(5.6f)).clickable { vm.onCloseSplit() }
-            )
-            Spacer(Modifier.width(du(1.5f)))
-        }
         Icon(
             Icons.Filled.Home, null, tint = Color.White,
             modifier = Modifier
@@ -544,7 +537,7 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
             playing = m.playing,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(du(7f))
+                .height(du(6.4f))
         )
         Row(Modifier.fillMaxWidth()) {
             Text(formatClock(pos), color = Color.White, fontSize = su(3.2f))
@@ -559,11 +552,11 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
         ) {
             Icon(
                 Icons.Filled.SkipPrevious, null, tint = Color.White,
-                modifier = Modifier.size(du(8f)).clickable { vm.previous() }
+                modifier = Modifier.size(du(11f)).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).clickable { vm.previous() }.padding(du(1.2f))
             )
             Box(
                 Modifier
-                    .size(du(11f))
+                    .size(du(14f))
                     .border(2.dp, Color.White, CircleShape)
                     .clip(CircleShape)
                     .clickable { vm.playPause() },
@@ -571,18 +564,21 @@ fun MediaCard(vm: CarViewModel, modifier: Modifier = Modifier) {
             ) {
                 Icon(
                     if (m.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null,
-                    tint = Color.White, modifier = Modifier.size(du(7.4f))
+                    tint = Color.White, modifier = Modifier.size(du(9.2f))
                 )
             }
             Icon(
                 Icons.Filled.SkipNext, null, tint = Color.White,
-                modifier = Modifier.size(du(8f)).clickable { vm.next() }
+                modifier = Modifier.size(du(11f)).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).clickable { vm.next() }.padding(du(1.2f))
             )
         }
     }
 }
 
-/** Music progress: orange track with a live sound wave rising above the played part, white-ringed thumb. */
+/**
+ * Music progress like the reference: thick orange track, three soft translucent wave layers
+ * (orange / cream / yellow) that swell above the played part and taper at both ends, white-ringed glowing thumb.
+ */
 @Composable
 fun SeekBar(
     fraction: Float,
@@ -592,55 +588,78 @@ fun SeekBar(
     playing: Boolean = false
 ) {
     var phase by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    androidx.compose.runtime.LaunchedEffect(playing) {
-        if (!playing) return@LaunchedEffect
+    var level by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val target = if (!playing) 0f else if (bars.isEmpty()) 0.55f else {
+        // bass-weighted average of the live spectrum
+        var sum = 0f
+        val n = minOf(bars.size, 12)
+        for (i in 0 until n) sum += bars[i].coerceIn(0f, 1f)
+        (0.3f + 1.1f * sum / n).coerceIn(0.3f, 1f)
+    }
+    val targetState = androidx.compose.runtime.rememberUpdatedState(target)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
         var last = androidx.compose.runtime.withFrameNanos { it }
         while (true) {
             val now = androidx.compose.runtime.withFrameNanos { it }
-            phase += (now - last) / 1e9f * 3.2f
+            val dt = (now - last) / 1e9f
             last = now
+            phase += dt * 2.2f
+            // smooth attack / release so the waves breathe instead of flickering
+            level += (targetState.value - level) * (1f - kotlin.math.exp(-dt * 6f))
         }
     }
-    val energy = if (!playing) 0f else if (bars.isEmpty()) 0.35f else maxOf(0.2f, bars.average().toFloat().coerceIn(0f, 1f))
     Canvas(
         modifier.pointerInput(Unit) {
             detectTapGestures { off -> onSeek(off.x / size.width) }
         }
     ) {
-        val h = size.height * 0.16f
-        val cy = size.height * 0.74f
+        val h = size.height * 0.15f
+        val cy = size.height * 0.76f
         val pad = size.height * 0.2f
         val w = size.width - pad * 2
         val f = fraction.coerceIn(0f, 1f)
         val px = pad + w * f
-        val orange = Color(0xFFFF6A00)
+        val top = cy - h / 2
+        val orange = Color(0xFFE86400)
+
         // remaining track
-        drawRoundRect(Color(0x55FFFFFF), Offset(pad, cy - h / 2), Size(w, h), CornerRadius(h / 2))
-        // sound wave above the played part
-        if (px > pad + 4f) {
-            val path = androidx.compose.ui.graphics.Path()
-            path.moveTo(pad, cy - h / 2)
-            var x = pad
-            val maxAmp = size.height * 0.62f
-            while (x <= px) {
-                val rel = (x - pad) / w
-                val b = if (bars.isEmpty()) 0.5f else bars[(rel * (bars.size - 1)).toInt().coerceIn(0, bars.size - 1)].coerceIn(0f, 1f)
-                val wave = 0.5f + 0.5f * kotlin.math.sin(x * 0.045f + phase) * kotlin.math.sin(x * 0.011f - phase * 0.6f)
-                val edge = minOf(1f, (x - pad) / 30f, (px - x) / 30f + 0.15f).coerceAtLeast(0f)
-                val amp = maxAmp * energy * (0.25f + 0.75f * b) * wave * edge
-                path.lineTo(x, cy - h / 2 - amp)
-                x += 3f
+        drawRoundRect(Color(0x66C8C8C8), Offset(pad, top), Size(w, h), CornerRadius(h / 2))
+
+        // wave layers (back -> front)
+        val played = px - pad
+        if (played > h) {
+            val maxAmp = h * 3.4f * level
+            data class L(val color: Color, val k1: Float, val k2: Float, val sp: Float, val amp: Float, val off: Float)
+            val layers = listOf(
+                L(Color(0xFFFF7A00).copy(alpha = 0.95f), 0.020f, 0.0065f, 1.0f, 1.00f, 0f),
+                L(Color(0xFFFFE3D2).copy(alpha = 0.85f), 0.026f, 0.0090f, -0.8f, 0.78f, 2.1f),
+                L(Color(0xFFFFC800).copy(alpha = 0.90f), 0.034f, 0.0120f, 1.3f, 0.52f, 4.3f)
+            )
+            for (l in layers) {
+                val path = androidx.compose.ui.graphics.Path()
+                path.moveTo(pad, top + 1f)
+                var x = 0f
+                while (x <= played) {
+                    val rel = x / played
+                    val taper = kotlin.math.sin(Math.PI.toFloat() * rel).let { it * it.coerceAtLeast(0f) }.let { kotlin.math.sqrt(it) }
+                    val wv = 0.5f + 0.5f * kotlin.math.sin(x * l.k1 * 2f + phase * l.sp + l.off) *
+                        kotlin.math.sin(x * l.k2 * 2f - phase * 0.55f * l.sp + l.off * 0.7f)
+                    val b = if (bars.isEmpty()) 0.6f else bars[(rel * (bars.size - 1)).toInt().coerceIn(0, bars.size - 1)].coerceIn(0f, 1f)
+                    val y = top + 1f - maxAmp * l.amp * taper * (0.28f + 0.72f * wv) * (0.65f + 0.35f * b)
+                    path.lineTo(pad + x, y)
+                    x += 2f
+                }
+                path.lineTo(px, top + 1f)
+                path.close()
+                drawPath(path, l.color)
             }
-            path.lineTo(px, cy - h / 2)
-            path.close()
-            drawPath(path, Brush.verticalGradient(listOf(Color(0xFFFFE066).copy(alpha = 0.95f), orange.copy(alpha = 0.85f)), startY = cy - maxAmp, endY = cy))
         }
-        // played track
-        drawRoundRect(
-            Brush.horizontalGradient(listOf(Color(0xFFE85D00), Color(0xFFFF8A1F)), startX = pad, endX = pad + w),
-            Offset(pad, cy - h / 2), Size(px - pad, h), CornerRadius(h / 2)
-        )
-        // thumb
+
+        // played track on top of the waves' roots
+        drawRoundRect(orange, Offset(pad, top), Size(played.coerceAtLeast(h), h), CornerRadius(h / 2))
+
+        // thumb with soft glow
+        drawCircle(orange.copy(alpha = 0.35f), size.height * 0.30f, Offset(px, cy))
         drawCircle(Color.White, size.height * 0.2f, Offset(px, cy))
         drawCircle(orange, size.height * 0.135f, Offset(px, cy))
     }

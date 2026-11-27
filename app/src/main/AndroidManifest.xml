@@ -44,7 +44,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:resizeableActivity="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             android:stateNotNeeded="true"
@@ -62,19 +61,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".SplitService"
-            android:exported="true"
-            android:label="Car Launcher split screen"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/split_service" />
-        </service>
 
     </application>
 </manifest>

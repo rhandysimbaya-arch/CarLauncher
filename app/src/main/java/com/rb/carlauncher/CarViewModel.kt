@@ -163,10 +163,6 @@ class CarViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var fxSessions by mutableIntStateOf(0)
         private set
-    /** true while the dashboard shares the screen with another app (set by MainActivity). */
-    var inSplit by mutableStateOf(false)
-    var onSplitNav: (String) -> Unit = {}
-    var onCloseSplit: () -> Unit = {}
     var volume by mutableIntStateOf(0)
         private set
     val volumeMax: Int = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
